@@ -116,7 +116,10 @@
   }
 
   function handleFailure(err) {
-    if (err && err.code === "AUTH") {
+    // Solo una sessione realmente scaduta deve riportare l'utente al login:
+    // se il token non c'era (pagina appena aperta), l'errore AUTH riguarda
+    // una chiamata fatta prima del login e va lasciato al chiamante.
+    if (err && err.code === "AUTH" && readToken()) {
       clearToken();
       try {
         window.dispatchEvent(new CustomEvent("gilda:auth-expired", { detail: { message: err.message } }));
