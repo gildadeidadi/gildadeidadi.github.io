@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="52" height="52" role="img" aria-label="Gilda dei Dadi">
+  <rect x="4" y="4" width="44" height="44" rx="10" stroke="#c05a1e" stroke-width="2.5" fill="#fdf6ec"/>
+  <circle cx="17" cy="17" r="4" fill="#c9922a"/>
+  <circle cx="35" cy="17" r="4" fill="#c9922a"/>
+  <circle cx="26" cy="26" r="4" fill="#c9922a"/>
+  <circle cx="17" cy="35" r="4" fill="#c9922a"/>
+  <circle cx="35" cy="35" r="4" fill="#c9922a"/>
+</svg>

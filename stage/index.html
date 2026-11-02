@@ -1,0 +1,2623 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#8B4513">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Gilda dei Dadi</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg">
+<link rel="apple-touch-icon" href="assets/img/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<!--
+  Generato da dev/scripts/migrate-webapp.js a partire dal webapp.html legacy.
+  Non modificare a mano il markup migrato senza aggiornare anche lo script.
+-->
+<!-- ═══ HEADER ═══ -->
+<header id="app-header">
+ <div class="h-inner">
+ <div class="h-brand-row" id="h-brand-row" style="display:flex;justify-content:center">
+ <a href="https://www.wakeupvanzago.it/gilda-dei-dadi" target="_blank" class="h-logo-wrap">
+ <img id="h-logo" src="assets/img/logo.svg" alt="Gilda dei Dadi">
+ <span class="h-org-name" data-org-name>Gilda dei Dadi</span>
+ </a>
+ </div>
+ 
+ <nav id="org-macro-tabs" class="org-macro-tabs" aria-label="Sezioni organizzatore" data-org-only style="display:none">
+ <button type="button" class="tab-btn org-macro-btn active" data-macro="macro-stats" onclick="switchOrgMacro('macro-stats',this)" title="Statistiche">📊 Statistiche</button>
+ <button type="button" class="tab-btn org-macro-btn" data-macro="macro-utenti" onclick="switchOrgMacro('macro-utenti',this)" title="Anagrafiche">👤 Anagrafiche</button>
+ <button type="button" class="tab-btn org-macro-btn" data-macro="macro-eventi" onclick="switchOrgMacro('macro-eventi',this)" title="Eventi e Tavoli">📌 Eventi</button>
+ <a href="?pagina=accoglienza" class="tab-btn org-macro-btn" title="Accoglienza" style="text-decoration:none">🚪 Accoglienza</a>
+ <button type="button" class="tab-btn org-macro-btn" data-macro="macro-setup" onclick="switchOrgMacro('macro-setup',this)" title="Setup">🔧 Setup</button>
+ </nav>
+ 
+ <nav id="master-macro-tabs" class="org-macro-tabs" aria-label="Sezioni master" hidden>
+ <button type="button" class="tab-btn org-macro-btn master-macro-btn active" data-master-panel="m-panel-avventure" onclick="switchMasterMacroTab('m-panel-avventure',this)" title="Le tue avventure">🎲 Avventure</button>
+ <button type="button" class="tab-btn org-macro-btn master-macro-btn" data-master-panel="m-panel-tavoli" onclick="switchMasterMacroTab('m-panel-tavoli',this)" title="Sessioni dove proporre">📅 Sessioni</button>
+ <button type="button" class="tab-btn org-macro-btn master-macro-btn" data-master-panel="m-panel-impegni" onclick="switchMasterMacroTab('m-panel-impegni',this)" title="Le avventure che porterai">🧳 Impegni</button>
+ </nav>
+ <nav id="sede-macro-tabs" class="org-macro-tabs" aria-label="Sezioni co-organizzatore" hidden>
+ <button type="button" class="tab-btn org-macro-btn sede-macro-btn active" title="Eventi del co-organizzatore">📅 Eventi</button>
+ </nav>
+ <div class="h-trailing" id="h-trailing">
+ <div class="h-meta">
+ <h1 id="h-title">⚔️ Sistema Prenotazioni</h1>
+ <p id="h-sub">Caricamento…</p>
+ </div>
+ 
+ <div id="h-org-actions" class="h-org-actions" aria-label="Azioni organizzatore" data-org-only style="display:none">
+ <button type="button" class="org-header-btn" onclick="caricaOrg()" title="Ricarica dati dashboard">↺ Aggiorna</button>
+ <button type="button" class="org-header-btn" onclick="logoutOrg()" title="Esci dall'area organizzatore">⇦ Esci</button>
+ </div>
+ 
+ <div id="h-master-actions" class="h-org-actions" aria-label="Azioni master">
+ <button type="button" class="org-header-btn" onclick="apriMasterModificaInfoPopup()" title="Modifica info master">✏️ Info</button>
+ <button type="button" class="org-header-btn" onclick="caricaAreaMaster()" title="Ricarica area master">↺ Aggiorna</button>
+ </div>
+ <div id="h-sede-actions" class="h-org-actions" aria-label="Azioni co-organizzatore">
+ <button type="button" class="org-header-btn" onclick="tornaAccessoSede()" title="Torna all'elenco co-organizzatori">⇦ Elenco</button>
+ <button type="button" class="org-header-btn" onclick="caricaAreaSede()" title="Ricarica area co-organizzatore">↺ Aggiorna</button>
+ </div>
+ </div>
+ </div>
+</header>
+
+<!-- ═══ APP ═══ -->
+<div class="wrap" id="app">
+ <!-- Token invito co-prenotante (stesso valore della query della richiesta a /exec); letto da JS dopo il parse. -->
+ <script type="application/json" id="gilda-invite-token-json">""</script>
+
+ <!-- Loader -->
+ <div id="loader" class="loader">
+ <div class="dice-loader">
+ <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+ <rect x="4" y="4" width="44" height="44" rx="10" stroke="#c05a1e" stroke-width="2.5" fill="none"/>
+ <circle cx="17" cy="17" r="4" fill="#c9922a"/>
+ <circle cx="35" cy="17" r="4" fill="#c9922a"/>
+ <circle cx="26" cy="26" r="4" fill="#c9922a"/>
+ <circle cx="17" cy="35" r="4" fill="#c9922a"/>
+ <circle cx="35" cy="35" r="4" fill="#c9922a"/>
+ </svg>
+ </div>
+ <span id="loader-msg">Caricamento…</span>
+ </div>
+
+ <div id="no-uuid" class="hidden"></div>
+
+ <!-- ═══ LOGIN ORG ═══ -->
+ <div id="org-login" class="hidden">
+ <div class="login-box">
+ <div class="login-head">
+ <h2>🔐 Accesso Organizzatore</h2>
+ <p>Pannello riservato alla gestione eventi</p>
+ </div>
+ <div class="login-body">
+ <div class="field first">
+ <label class="lbl">Password</label>
+ <div class="pwd-wrap">
+ <input type="password" id="org-pwd" onkeydown="if(event.key==='Enter')verificaOrg()" placeholder="••••••••••" autocomplete="off">
+ <button class="pwd-tog" onclick="togglePwd('org-pwd')" type="button">👁</button>
+ </div>
+ </div>
+ <div class="login-err" id="org-err"></div>
+ <p style="margin-top:8px;font-size:12px;color:var(--smoke);line-height:1.5">
+ La password non viene mai salvata nel browser: viene inviato solo un hash sicuro per la verifica.
+ </p>
+ <div style="margin-top:20px">
+ <button class="btn btn-p btn-full btn-lg" onclick="verificaOrg()">Accedi &rarr;</button>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- ═══ ACCESSO CO-ORGANIZZATORE (elenco + OTP / password) ═══ -->
+ <div id="sede-login" class="hidden">
+ <div class="login-box sede-login-box">
+ <div class="login-head">
+ <h2>🤝 Accesso Co-organizzatore</h2>
+ <p id="sede-login-head-sub">Seleziona il co-organizzatore per gestire eventi e iscrizioni</p>
+ </div>
+ <div class="login-body">
+ <div id="sede-login-pick">
+ <div class="field first">
+ <label class="lbl" for="sede-login-q">Cerca co-organizzatore</label>
+ <input type="search" id="sede-login-q" placeholder="Nome o indirizzo…" oninput="renderSedeLoginList()" autocomplete="off">
+ </div>
+ <div class="login-err" id="sede-login-err"></div>
+ <div id="sede-login-list" class="sede-login-list" aria-live="polite"></div>
+ </div>
+ <div id="sede-login-auth" class="hidden">
+ <button type="button" class="btn btn-o btn-sm" style="margin-bottom:12px" onclick="tornaElencoSediLogin()">← Elenco co-organizzatori</button>
+ <div id="sede-auth-nome" class="sede-auth-nome"></div>
+ <div id="sede-auth-meta" class="sede-auth-meta"></div>
+ <div class="sede-auth-tabs" role="tablist">
+ <button type="button" class="sede-auth-tab active" id="sede-auth-tab-otp" onclick="switchSedeAuthTab('otp')">📧 Codice email</button>
+ <button type="button" class="sede-auth-tab" id="sede-auth-tab-pwd" onclick="switchSedeAuthTab('pwd')">🔑 Password</button>
+ </div>
+ <div class="login-err" id="sede-auth-err"></div>
+ <div id="sede-auth-otp">
+ <p class="hint" id="sede-auth-otp-hint" style="margin-bottom:10px">Invia un codice a 6 cifre all’email del co-organizzatore.</p>
+ <button type="button" class="btn btn-s btn-full" id="sede-otp-send-btn" onclick="inviaOtpSede()">Invia codice</button>
+ <div class="field" style="margin-top:14px">
+ <label class="lbl" for="sede-otp-code">Codice ricevuto</label>
+ <input type="text" id="sede-otp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456" onkeydown="if(event.key==='Enter')verificaOtpSede()">
+ </div>
+ <div style="margin-top:14px">
+ <button type="button" class="btn btn-p btn-full btn-lg" onclick="verificaOtpSede()">Accedi con codice →</button>
+ </div>
+ </div>
+ <div id="sede-auth-pwd" class="hidden">
+ <p class="hint" id="sede-auth-pwd-hint" style="margin-bottom:10px">Password impostata dall’organizzazione per questo co-organizzatore.</p>
+ <div class="field first">
+ <label class="lbl" for="sede-pwd">Password</label>
+ <div class="pwd-wrap">
+ <input type="password" id="sede-pwd" onkeydown="if(event.key==='Enter')verificaPasswordSede()" placeholder="••••••••••" autocomplete="current-password">
+ <button class="pwd-tog" onclick="togglePwd('sede-pwd')" type="button">👁</button>
+ </div>
+ </div>
+ <div style="margin-top:18px">
+ <button type="button" class="btn btn-p btn-full btn-lg" onclick="verificaPasswordSede()">Accedi →</button>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- ═══ LOGIN ACCOGLIENZA ═══ -->
+ <div id="accoglienza-login" class="hidden">
+ <div class="login-box">
+ <div class="login-head">
+ <h2>🚪 Accesso Accoglienza</h2>
+ <p>Check-in e gestione arrivi eventi</p>
+ </div>
+ <div class="login-body">
+ <div class="field first">
+ <label class="lbl">Password</label>
+ <div class="pwd-wrap">
+ <input type="password" id="acc-pwd" onkeydown="if(event.key==='Enter')verificaAccoglienza()" placeholder="••••••••••" autocomplete="off">
+ <button class="pwd-tog" onclick="togglePwd('acc-pwd')" type="button">👁</button>
+ </div>
+ </div>
+ <div class="login-err" id="acc-err"></div>
+ <p style="margin-top:8px;font-size:12px;color:var(--smoke);line-height:1.5">
+ La password non viene mai salvata nel browser: viene inviato solo un hash sicuro per la verifica.
+ </p>
+ <div style="margin-top:20px">
+ <button class="btn btn-p btn-full btn-lg" onclick="verificaAccoglienza()">Accedi &rarr;</button>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- ═══ MAIN ACCOGLIENZA (mappa eventi standalone) ═══ -->
+ <div id="accoglienza-main" class="hidden">
+ <div id="acc-fa"></div>
+ <div id="acc-header-bar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+ <div>
+ <h2 style="margin:0;font-family:var(--font-d);font-size:20px">🚪 Accoglienza</h2>
+ <p style="margin:4px 0 0;font-size:13px;color:var(--smoke)">Check-in e gestione arrivi</p>
+ </div>
+ <div style="display:flex;gap:8px;align-items:center">
+ <button type="button" class="btn btn-o btn-sm" onclick="accRicarica()" title="Ricarica dati">↺ Aggiorna</button>
+ <button type="button" class="btn btn-o btn-sm" onclick="accLogout()" title="Esci">⇦ Esci</button>
+ </div>
+ </div>
+ <div id="acc-mappa-container"></div>
+ </div>
+
+ <!-- ═══ DASHBOARD ORG ═══ -->
+ <div id="org-main" class="hidden">
+ <div id="org-fa"></div>
+ <div id="org-stats-page" class="org-page-content">
+ <div class="stats-grid" id="org-stats"></div>
+ <div class="tabs" id="org-tabs">
+ <div class="tabs-group">
+ <div class="tabs-label">Panoramica</div>
+ <div class="tabs-row">
+ <button class="tab-btn active" data-tab="t-hc" onclick="switchTab('t-hc',this)">🧪 Health check</button>
+ <button class="tab-btn" data-tab="t-mail" onclick="switchTab('t-mail',this)">📧 Mail</button>
+ <button class="tab-btn" data-tab="t-pren" onclick="switchTab('t-pren',this)">📋 Prenotazioni</button>
+ <button class="tab-btn" data-tab="t-fasce" onclick="switchTab('t-fasce',this)">📊 Fasce età</button>
+ <button class="tab-btn" data-tab="t-log" onclick="switchTab('t-log',this)">📝 Attività recenti</button>
+ </div>
+ </div>
+ </div>
+ </div>
+ <div id="org-eventi-page" class="org-page-content hidden" aria-hidden="true"></div>
+
+ <!-- TAB: Health check fogli -->
+ <div id="t-hc" class="tab-panel active">
+ <div class="card">
+ <div class="card-head"><div class="card-head-icon">🧪</div><h2>Health check fogli</h2></div>
+ <div class="card-body">
+ <p class="org-tab-desc">
+ Controlla coerenza tra <code>Tavoli.occupati</code> e conteggio vivo da <code>Risposte</code>.
+ Le anomalie sono righe attive con posti a zero, nome vuoto, sessione mancante o tavolo mancante (la lista d’attesa può non avere tavolo). L’email vuota è un problema solo fuori dalle sessioni GDT: sull’ingresso può mancare.
+ </p>
+ <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px">
+ <button class="btn btn-s btn-sm" id="hc-run-btn" onclick="runHealthCheckFogliNow()">🧪 Esegui health check ora</button>
+ <button class="btn btn-o btn-sm" id="hc-list-btn" onclick="caricaAnomaliePrenotazioni()">Vedi anomalie</button>
+ </div>
+ <div class="stats-grid" id="org-hc-stats" style="margin-top:10px"></div>
+ <div id="org-hc-meta" style="margin-top:10px;font-size:13px;color:var(--smoke);font-style:italic"></div>
+ <div id="org-hc-anomalie" style="margin-top:14px"></div>
+ </div>
+ </div>
+ </div>
+
+ <!-- TAB: Mail -->
+ <div id="t-mail" class="tab-panel">
+ <div class="card">
+ <div class="card-head"><div class="card-head-icon">📧</div><h2>Gestione email</h2></div>
+ <div class="card-body">
+ <p class="org-tab-desc">
+ Monitora quota e coda email, forza uno smaltimento manuale e configura rapidamente il trigger automatico.
+ </p>
+ <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px">
+ <button class="btn btn-s btn-sm" id="mail-refresh-btn" onclick="aggiornaStatoMailOrg()">↺ Aggiorna stato mail</button>
+ <button class="btn btn-o btn-sm" id="mail-run-queue-btn" onclick="processaCodaEmailOraDaUI()">🚀 Processa coda ora</button>
+ <button class="btn btn-o btn-sm" id="mail-install-trigger-btn" onclick="installaTriggerCodaEmailDaUI()">⏱ Configura trigger coda (30 min)</button>
+ </div>
+ <div id="mail-status-panel" style="margin-top:12px;font-size:13px;color:var(--ink2);background:#fff;border:1px solid var(--vellum);border-radius:10px;padding:10px 12px">
+ Stato email non ancora caricato.
+ </div>
+ <div id="mail-queue-preview" style="margin-top:10px;font-size:12.5px;color:var(--smoke)"></div>
+ <div id="mail-sent-log" style="margin-top:12px;font-size:12.5px;color:var(--smoke)"></div>
+ </div>
+ </div>
+ </div>
+
+ <!-- TAB: Prenotazioni -->
+ <div id="t-pren" class="tab-panel">
+ <div class="card">
+ <div class="card-head"><div class="card-head-icon">🔍</div><h2>Filtra prenotazioni</h2></div>
+ <div class="card-body">
+ <p class="org-tab-desc">
+ Cerca, filtra ed esporta le prenotazioni di tutti gli eventi. Usa i filtri per restringere l’elenco e scarica un CSV per ulteriori analisi.
+ </p>
+ <div class="org-list-toolbar">
+ <div class="filtri" style="flex:1 1 100%">
+ <input type="search" id="f-search" placeholder="Cerca nome, email, cellulare…" oninput="renderTabella()" autocomplete="off">
+ <select id="f-evento" onchange="renderTabella()" style="max-width:220px"><option value="">— Tutti gli eventi —</option></select>
+ <select id="f-tipo" onchange="renderTabella()" style="max-width:160px">
+ <option value="">— Tutti —</option>
+ <option value="ok">✅ Confermati</option>
+ <option value="attesa">⏳ In attesa</option>
+ </select>
+ </div>
+ <div id="cnt-lbl" class="org-tbl-count"></div>
+ <div class="org-list-toolbar-actions">
+ <button class="btn btn-o btn-sm" onclick="exportCSV()">⬇ CSV</button>
+ </div>
+ </div>
+ <div class="tbl-wrap org-tbl-scroll">
+ <table class="pren">
+ <thead><tr>
+ <th>Nome</th><th>Contatti</th><th>📜 Evento</th>
+ <th>🧭 Sessione</th><th>🎲 Tavolo</th><th>P.</th><th class="org-col-optional">Fasce</th><th>Stato</th>
+ </tr></thead>
+ <tbody id="org-tbody"></tbody>
+ </table>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- TAB: Mappa eventi — step1 griglia, step2 dettaglio+contesto -->
+ <div id="t-mappa" class="tab-panel">
+ <div id="mappa-shell" class="mappa-shell">
+
+ <!-- STEP 1: mappa eventi (griglia) -->
+ <div id="mappa-lv1">
+ <div id="mappa-action-panel-home" class="mappa-action-panel">
+ <div class="mappa-action-head">
+ <div>
+ <div class="mappa-action-kicker">Centro operativo</div>
+ <h3>Azioni evento</h3>
+ </div>
+ <div class="mappa-action-head-btns">
+ <button type="button" class="btn btn-o btn-sm" onclick="caricaOrg()">↺ Aggiorna dati</button>
+ <button type="button" class="btn btn-o btn-sm" onclick="apriMappaVistaAvanzata()" title="Gestione avanzata">⚙️</button>
+ </div>
+ </div>
+ <p class="mappa-action-subtitle">Seleziona un evento dalla mappa per gestire sessioni e iscrizioni.</p>
+ <div class="mappa-action-actions">
+ <button type="button" class="btn btn-s btn-sm" onclick="apriNuovoEvento()">➕ Nuovo evento</button>
+ <input type="search" id="mappa-search-input-fixed" class="mappa-tavolo-pick" placeholder="🔎 Cerca evento o luogo…" autocomplete="off"
+ oninput="mappaSearchTerm=this.value||'';renderMappaEventi()">
+ </div>
+ </div>
+
+ <div class="sec-title" style="margin-bottom:8px">📅 Seleziona un evento</div>
+ <p class="org-tab-desc" style="margin-bottom:14px">
+ Ogni carta mostra prenotazioni, partecipanti, sessioni, liste d’attesa e percentuale di riempimento. Clicca per entrare nel dettaglio.
+ </p>
+ <div class="mappa-subtabs" style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">
+ <button type="button" class="tab-btn mappa-subtab active" data-mappa-panel="mappa-panel-attivi" onclick="switchMappaSubtab('mappa-panel-attivi',this)">Eventi attivi</button>
+ <button type="button" class="tab-btn mappa-subtab" data-mappa-panel="mappa-panel-inattivi" onclick="switchMappaSubtab('mappa-panel-inattivi',this)">Eventi inattivi</button>
+ <button type="button" class="tab-btn mappa-subtab" data-mappa-panel="mappa-panel-passati" onclick="switchMappaSubtab('mappa-panel-passati',this)">Eventi passati</button>
+ </div>
+ <div id="mappa-panel-attivi" class="mappa-panel">
+ <div id="mappa-eventi-grid" class="mappa-ev-grid"></div>
+ </div>
+ <div id="mappa-panel-inattivi" class="mappa-panel hidden">
+ <div id="mappa-eventi-grid-inattivi" class="mappa-ev-grid"></div>
+ </div>
+ <div id="mappa-panel-passati" class="mappa-panel hidden">
+ <div id="mappa-eventi-grid-passati" class="mappa-ev-grid"></div>
+ </div>
+ <div class="mappa-legend" aria-hidden="true"><span><span class="dot"></span> Barra = posti occupati / totali</span><span><span class="dot dot-att"></span> Attesa = in lista d'attesa</span></div>
+ </div>
+
+ <!-- STEP 2: dettaglio evento + contesto -->
+ <div id="mappa-step2" class="mappa-step2 hidden">
+ <section class="mappa-col mappa-col-main" id="mappa-col-main">
+ <div class="mappa-detail-head">
+ <button type="button" class="mappa-bc-back" onclick="tornaEventi()">← Eventi</button>
+ <h2 id="mappa-ev-title" class="mappa-detail-title">–</h2>
+ <p id="mappa-ev-meta" class="mappa-detail-meta"></p>
+ </div>
+
+ <div class="mappa-detail-toolbar">
+ <div id="mappa-sess-tabs" class="mappa-sess-tabs"></div>
+ <div id="mappa-action-panel" class="mappa-action-bar">
+ <div id="mappa-action-actions" class="mappa-action-actions"></div>
+ </div>
+ </div>
+
+ <div id="mappa-lv2">
+ <div class="mappa-sess-subtabs" role="tablist">
+ <button type="button" class="sess-subtab active" id="sess-subtab-main" data-sess-panel="sess-panel-tavoli" onclick="switchSessView('sess-panel-tavoli', this)">Tavoli</button>
+ <button type="button" class="sess-subtab" id="sess-subtab-pren" data-sess-panel="sess-panel-pren" onclick="switchSessView('sess-panel-pren', this)">Prenotazioni</button>
+ </div>
+ <div id="sess-panel-tavoli" class="sess-panel">
+ <div id="mappa-tavoli-grid" class="mappa-tav-grid"></div>
+ </div>
+ <div id="sess-panel-pren" class="sess-panel hidden">
+ <div id="mappa-pren-section">
+ <div class="tbl-wrap">
+ <table class="pren pren-mappa">
+ <thead><tr>
+ <th>Nome</th><th>Contatti</th><th>Tavolo</th><th>P.</th><th>Fasce</th><th>Partecipanti</th><th>Quando</th><th>Dettagli</th><th>Stato</th>
+ </tr></thead>
+ <tbody id="mappa-pren-tbody"></tbody>
+ </table>
+ </div>
+ </div>
+ <div id="mappa-attesa-section" class="mappa-attesa-block">
+ <div class="mappa-attesa-head">Lista d'attesa</div>
+ <div id="mappa-attesa-grid" class="mappa-attesa-grid"></div>
+ <div id="mappa-attesa-empty" class="hidden mappa-attesa-empty">Nessuno in lista d'attesa per questa sessione.</div>
+ </div>
+ </div>
+ </div>
+ </section>
+
+ <aside class="mappa-col mappa-col-ctx" id="mappa-col-ctx">
+ <div class="mappa-ctx-card mappa-ctx-card-kpi">
+ <div class="mappa-ctx-kicker">Sessione</div>
+ <div id="mappa-ctx-kpi" class="mappa-ctx-kpi"></div>
+ </div>
+ <div class="mappa-ctx-card">
+ <div class="mappa-ctx-head">
+ <span class="mappa-ctx-kicker">Mail</span>
+ <button type="button" class="btn btn-o btn-sm" onclick="refreshMappaContesto(true)" title="Aggiorna">↺</button>
+ </div>
+ <div id="mappa-ctx-mail" class="mappa-ctx-body"></div>
+ </div>
+ <div class="mappa-ctx-card">
+ <div class="mappa-ctx-head">
+ <span class="mappa-ctx-kicker">Attività</span>
+ </div>
+ <div id="mappa-ctx-log" class="mappa-ctx-body"></div>
+ </div>
+ </aside>
+ </div>
+ </div>
+ </div>
+
+ <!-- TAB: Fasce -->
+ <div id="t-fasce" class="tab-panel">
+ <div class="card">
+ <div class="card-head"><div class="card-head-icon">📊</div><h2>Distribuzione fasce d'età</h2></div>
+ <div class="card-body">
+ <p class="org-tab-desc">
+ Visualizza come si distribuiscono i partecipanti per fascia d’età, su tutti gli eventi o su uno specifico. Le presenze sono separate per tipo di sessione (GDR, GDT, Panel).
+ </p>
+ <select id="fasce-ev" onchange="renderFasce()" style="max-width:280px;margin-bottom:20px">
+ <option value="">— Tutti gli eventi —</option>
+ </select>
+ <div class="fasce-meta">
+ <div id="fasce-main" class="fasce-main"></div>
+ <div id="fasce-tot" class="fasce-total"></div>
+ </div>
+ <div id="fasce-chart"></div>
+ </div>
+ </div>
+ </div>
+
+ <!-- TAB: Attività recenti -->
+ <div id="t-log" class="tab-panel">
+ <div class="card">
+ <div class="card-head"><div class="card-head-icon">🧾</div><h2>Attività recenti</h2></div>
+ <div class="card-body">
+ <p class="org-tab-desc">
+ Log operativo con filtri, retention e archivio automatico delle voci più vecchie sul foglio <code>LogAzioniArchivio</code>.
+ </p>
+ <div class="org-sticky-tools">
+ <div class="filtri" style="flex-wrap:wrap;gap:8px">
+ <select id="log-limit" onchange="renderLogAzioni()" style="max-width:140px">
+ <option value="20" selected>Ultime 20</option>
+ <option value="50">Ultime 50</option>
+ <option value="100">Ultime 100</option>
+ <option value="200">Ultime 200</option>
+ <option value="500">Ultime 500</option>
+ </select>
+ <select id="log-categoria" onchange="renderLogAzioni()" style="max-width:160px">
+ <option value="all">Tutte le categorie</option>
+ <option value="operativa">Operative</option>
+ <option value="form">Form prenotazione</option>
+ <option value="email">Email / notifiche</option>
+ <option value="errore">Errori / quota</option>
+ <option value="sistema">Sistema / backup</option>
+ </select>
+ <input id="log-q" type="search" placeholder="Cerca testo…" onkeydown="if(event.key==='Enter')renderLogAzioni()" style="max-width:220px">
+ <button class="btn btn-o btn-sm" onclick="renderLogAzioni()">↺ Aggiorna</button>
+ <button class="btn btn-o btn-sm" onclick="esportaLogAzioniCsv()">⬇ CSV</button>
+ <button class="btn btn-o btn-sm" onclick="archiviaLogVecchiDaUI()" title="Sposta le voci oltre il limite su LogAzioniArchivio">📦 Archivia vecchi</button>
+ <button class="btn btn-o btn-sm" onclick="purgaLogFormDaUI()" title="Rimuove le voci reg_form_* dal log attivo">🧹 Pulisci log form</button>
+ </div>
+ <div id="log-cnt" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--ash);margin:4px 0 0;text-transform:uppercase;letter-spacing:.08em"></div>
+ </div>
+ <div class="tbl-wrap org-tbl-scroll">
+ <table class="pren">
+ <thead>
+ <tr>
+ <th>Quando</th>
+ <th>Cat.</th>
+ <th>Tipo</th>
+ <th>📜 Evento</th>
+ <th>🧭 Sessione</th>
+ <th>🎲 Tavolo</th>
+ <th>Dettaglio</th>
+ </tr>
+ </thead>
+ <tbody id="log-tbody"></tbody>
+ </table>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- TAB: Utenti -->
+ <div id="t-utenti" class="tab-panel">
+ <div class="card">
+ <div class="card-head"><div class="card-head-icon">👤</div><h2>Anagrafiche</h2></div>
+ <div class="card-body">
+ <div class="eventi-subtabs">
+ <button type="button" class="tab-btn utenti-subtab active" data-utenti-panel="utenti-panel-utenti" onclick="switchUtentiSubtab('utenti-panel-utenti',this)">👤 Utenti</button>
+ <button type="button" class="tab-btn utenti-subtab" data-utenti-panel="utenti-panel-partecipanti" onclick="switchUtentiSubtab('utenti-panel-partecipanti',this)">🎯 Partecipanti</button>
+ <button type="button" class="tab-btn utenti-subtab" data-utenti-panel="utenti-panel-masters" onclick="switchUtentiSubtab('utenti-panel-masters',this)">🧙 Masters</button>
+ <button type="button" class="tab-btn utenti-subtab" data-utenti-panel="utenti-panel-sedi" onclick="switchUtentiSubtab('utenti-panel-sedi',this)">🤝 Co-organizzatori</button>
+ </div>
+
+ <div id="utenti-panel-utenti" class="utenti-panel">
+ <p class="org-tab-desc">
+ Vista sintetica delle persone che hanno effettuato almeno una prenotazione, aggregata su tutti gli eventi.
+ </p>
+ <div class="org-list-toolbar">
+ <div class="filtri">
+ <input type="search" id="f-utenti" placeholder="Cerca nome, email o cellulare…" oninput="renderUtentiOrg()" autocomplete="off">
+ </div>
+ <div id="utenti-cnt" class="org-tbl-count"></div>
+ <div class="org-list-toolbar-actions">
+ <button type="button" class="btn btn-s btn-sm" onclick="toggleOrgDisclose('org-utente-form', true)">➕ Nuovo utente</button>
+ </div>
+ </div>
+ <div id="org-utente-form" class="org-disclose" data-focus="#org-utente-nome">
+ <button type="button" class="org-disclose-toggle" onclick="toggleOrgDisclose('org-utente-form')" aria-expanded="false">
+ <span>Nuovo utente</span>
+ <span class="org-disclose-chevron" aria-hidden="true">▾</span>
+ </button>
+ <div class="org-disclose-body">
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl" for="org-utente-nome">Nome *</label>
+ <input type="text" id="org-utente-nome" placeholder="Nome e cognome" autocomplete="name">
+ </div>
+ <div class="field first">
+ <label class="lbl" for="org-utente-email">Email</label>
+ <input type="email" id="org-utente-email" placeholder="nome@email.it" autocomplete="email">
+ </div>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl" for="org-utente-cell">Cellulare</label>
+ <input type="text" id="org-utente-cell" placeholder="+39 ..." autocomplete="tel">
+ </div>
+ <div class="field first" style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
+ <button type="button" class="btn btn-s btn-sm" onclick="orgAggiungiUtenteForm()">Salva utente</button>
+ <button type="button" class="btn btn-o btn-sm" onclick="toggleOrgDisclose('org-utente-form', false)">Annulla</button>
+ </div>
+ </div>
+ <p class="hint" style="margin:8px 0 0">Se l'email esiste già, il record viene aggiornato.</p>
+ </div>
+ </div>
+ <div class="tbl-wrap org-tbl-scroll">
+ <table class="pren">
+ <thead><tr>
+ <th>Nome</th>
+ <th>Email</th>
+ <th class="org-col-optional">Cellulare</th>
+ <th class="td-num">Pren.</th>
+ <th class="td-num">Eventi</th>
+ <th class="td-actions">Azioni</th>
+ </tr></thead>
+ <tbody id="org-utenti-tbody"></tbody>
+ </table>
+ </div>
+ <div id="org-utenti-detail" style="margin-top:20px"></div>
+ </div>
+
+ <div id="utenti-panel-partecipanti" class="utenti-panel hidden">
+ <p class="org-tab-desc">
+ Persone indicate come <strong>partecipanti al tavolo</strong> da un altro prenotante (foglio Partecipanti): nickname o nome completo, con o senza email e invito.
+ </p>
+ <div class="org-list-toolbar">
+ <div class="filtri">
+ <input type="search" id="f-partecipanti" placeholder="Cerca nome o email…" oninput="renderPartecipantiOrg()" autocomplete="off">
+ </div>
+ <div id="partecipanti-cnt" class="org-tbl-count"></div>
+ </div>
+ <div class="tbl-wrap org-tbl-scroll">
+ <table class="pren">
+ <thead><tr>
+ <th>Nome</th>
+ <th>Email</th>
+ <th class="td-num">Part.</th>
+ <th class="td-num">Pren.</th>
+ <th>Eventi</th>
+ <th class="org-col-optional">Inviti</th>
+ <th class="td-actions">Azioni</th>
+ </tr></thead>
+ <tbody id="org-partecipanti-tbody"></tbody>
+ </table>
+ </div>
+ </div>
+
+ <div id="utenti-panel-masters" class="utenti-panel hidden">
+ <p class="org-tab-desc">
+ Elenco master con riepilogo tavoli assegnati e storico attività.
+ </p>
+ <div class="org-list-toolbar">
+ <div class="filtri">
+ <input type="search" id="f-masters" placeholder="Cerca master…" oninput="renderMastersOrg()" autocomplete="off">
+ </div>
+ <div id="masters-cnt" class="org-tbl-count"></div>
+ <div class="org-list-toolbar-actions">
+ <button type="button" class="btn btn-s btn-sm" onclick="toggleOrgDisclose('org-master-form', true)">➕ Nuovo master</button>
+ </div>
+ </div>
+ <div id="org-master-form" class="org-disclose" data-focus="#org-master-nome">
+ <button type="button" class="org-disclose-toggle" onclick="toggleOrgDisclose('org-master-form')" aria-expanded="false">
+ <span>Nuovo master</span>
+ <span class="org-disclose-chevron" aria-hidden="true">▾</span>
+ </button>
+ <div class="org-disclose-body">
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl" for="org-master-nome">Nome *</label>
+ <input type="text" id="org-master-nome" placeholder="Nome e cognome" autocomplete="name">
+ </div>
+ <div class="field first">
+ <label class="lbl" for="org-master-nick">Nick (nome mostrato) *</label>
+ <input type="text" id="org-master-nick" placeholder="Es. IlMastro">
+ </div>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl" for="org-master-email">Email</label>
+ <input type="email" id="org-master-email" placeholder="nome@email.it" autocomplete="email">
+ </div>
+ <div class="field first">
+ <label class="lbl" for="org-master-cell">Cellulare</label>
+ <input type="text" id="org-master-cell" placeholder="+39 ..." autocomplete="tel">
+ </div>
+ </div>
+ <div class="act-bar" style="margin-top:12px">
+ <button type="button" class="btn btn-s btn-sm" onclick="orgAggiungiMasterForm()">Salva master</button>
+ <button type="button" class="btn btn-o btn-sm" onclick="toggleOrgDisclose('org-master-form', false)">Annulla</button>
+ </div>
+ <p class="hint" style="margin:8px 0 0">Se il master esiste già, il record viene aggiornato.</p>
+ </div>
+ </div>
+ <div class="tbl-wrap org-tbl-scroll">
+ <table class="pren">
+ <thead><tr>
+ <th>Nome</th>
+ <th>Nick</th>
+ <th>Email</th>
+ <th class="org-col-optional">Cellulare</th>
+ <th class="td-num">Tavoli</th>
+ <th class="td-num">Eventi</th>
+ <th class="td-num org-col-optional">Sessioni</th>
+ <th class="td-actions">Link</th>
+ </tr></thead>
+ <tbody id="org-masters-tbody"></tbody>
+ </table>
+ </div>
+ </div>
+
+ <div id="utenti-panel-sedi" class="utenti-panel hidden">
+ <p class="org-tab-desc">
+ Partner ospitanti (biblioteche, librerie, associazioni). Il <strong>nome</strong> come <em>Luogo</em> o come <em>Co-organizzatore</em> sugli eventi apre la loro area.
+ Accesso con <strong>OTP email</strong> e/o <strong>password</strong>.
+ Opzione <strong>CC email</strong>: il co-organizzatore riceve in copia le mail di iscrizione, modifica e cancellazione.
+ </p>
+ <div class="org-list-toolbar">
+ <div class="filtri">
+ <input type="search" id="f-sedi" placeholder="Cerca co-organizzatore…" oninput="renderSediOrg()" autocomplete="off">
+ </div>
+ <div id="sedi-cnt" class="org-tbl-count"></div>
+ <div class="org-list-toolbar-actions">
+ <button type="button" class="btn btn-s btn-sm" onclick="orgNuovaSedeForm()">➕ Nuovo co-organizzatore</button>
+ </div>
+ </div>
+ <div id="org-sede-form" class="org-disclose" data-focus="#org-sede-nome">
+ <button type="button" class="org-disclose-toggle" onclick="toggleOrgDisclose('org-sede-form')" aria-expanded="false">
+ <span id="org-sede-form-title">Nuovo co-organizzatore</span>
+ <span class="org-disclose-chevron" aria-hidden="true">▾</span>
+ </button>
+ <div class="org-disclose-body">
+ <input type="hidden" id="org-sede-id" value="">
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl" for="org-sede-nome">Nome *</label>
+ <input type="text" id="org-sede-nome" placeholder="Es. Biblioteca Comunale">
+ </div>
+ <div class="field first">
+ <label class="lbl" for="org-sede-indirizzo">Indirizzo</label>
+ <input type="text" id="org-sede-indirizzo" placeholder="Via…">
+ </div>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl" for="org-sede-referente">Referente</label>
+ <input type="text" id="org-sede-referente" placeholder="Nome referente">
+ </div>
+ <div class="field first">
+ <label class="lbl" for="org-sede-email">Email (OTP accesso)</label>
+ <input type="email" id="org-sede-email" autocomplete="email">
+ </div>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl" for="org-sede-cell">Cellulare</label>
+ <input type="text" id="org-sede-cell" autocomplete="tel">
+ </div>
+ <div class="field first">
+ <label class="lbl" for="org-sede-note">Note</label>
+ <input type="text" id="org-sede-note" placeholder="Opzionale">
+ </div>
+ </div>
+ <div class="field" style="margin-top:4px">
+ <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;line-height:1.4">
+ <input type="checkbox" id="org-sede-cc-email" style="width:auto;margin-top:2px;accent-color:var(--ember)">
+ <span>CC email su <strong>iscrizione</strong>, <strong>modifica</strong> e <strong>cancellazione</strong> (richiede email)</span>
+ </label>
+ </div>
+ <div class="row2">
+ <div class="field first" style="display:flex;align-items:center;gap:8px;padding-top:18px">
+ <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+ <input type="checkbox" id="org-sede-attivo" checked style="width:auto;accent-color:var(--ember)">
+ Attivo
+ </label>
+ </div>
+ <div class="field first" style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
+ <button type="button" class="btn btn-s btn-sm" onclick="orgAggiungiSedeForm()">Salva</button>
+ <button type="button" class="btn btn-o btn-sm" onclick="orgResetSedeForm();toggleOrgDisclose('org-sede-form', false)">Annulla</button>
+ </div>
+ </div>
+ </div>
+ </div>
+ <div class="tbl-wrap org-tbl-scroll">
+ <table class="pren">
+ <thead><tr>
+ <th>Nome</th>
+ <th>Referente</th>
+ <th>Email</th>
+ <th class="org-col-optional">Stato</th>
+ <th class="td-actions">Azioni</th>
+ </tr></thead>
+ <tbody id="org-sedi-tbody"></tbody>
+ </table>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- TAB: Gestione eventi -->
+ <div id="t-eventi" class="tab-panel">
+ <div class="card">
+ <div class="card-head"><div class="card-head-icon">⚙️</div><h2>Gestione eventi (vista avanzata)</h2></div>
+ <div class="card-body">
+ <p class="org-tab-desc">
+ Vista secondaria per operazioni avanzate: la gestione quotidiana e` centralizzata nella Mappa operativa eventi.
+ </p>
+ <div style="display:flex;gap:10px;margin-bottom:22px;flex-wrap:wrap">
+ <button class="btn btn-s" onclick="apriNuovoEvento()">➕ Nuovo evento</button>
+ <button class="btn btn-o btn-sm" onclick="caricaOrg()">↺ Aggiorna</button>
+ </div>
+ <div class="card" style="margin-bottom:16px;box-shadow:none;border:1px solid var(--vellum)">
+ <div style="background:var(--parch2);border-bottom:1px solid var(--vellum);padding:10px 14px;display:flex;align-items:center;gap:8px">
+ <span style="font-family:var(--font-d);font-size:12px;color:var(--ember2);letter-spacing:.05em">FASCE D'ETA</span>
+ </div>
+ <div style="padding:14px">
+ <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+ <input type="text" id="org-fasce-eta-input" placeholder="Es. 51-65" style="min-width:180px;flex:1">
+ <button class="btn btn-o btn-sm" type="button" onclick="aggiungiFasciaEtaOrg()">➕ Aggiungi fascia</button>
+ </div>
+ <div id="org-fasce-eta-list" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+ </div>
+ </div>
+ <div class="eventi-subtabs" style="display:flex;gap:6px;margin-bottom:18px">
+ <button type="button" class="tab-btn eventi-subtab active" data-eventi-panel="eventi-panel-attivi" onclick="switchEventiSubtab('eventi-panel-attivi',this)">Eventi attivi</button>
+ <button type="button" class="tab-btn eventi-subtab" data-eventi-panel="eventi-panel-inattivi" onclick="switchEventiSubtab('eventi-panel-inattivi',this)">Eventi inattivi</button>
+ <button type="button" class="tab-btn eventi-subtab" data-eventi-panel="eventi-panel-passati" onclick="switchEventiSubtab('eventi-panel-passati',this)">Eventi passati</button>
+ </div>
+ <div id="eventi-panel-attivi" class="eventi-panel">
+ <div id="eventi-list"></div>
+ </div>
+ <div id="eventi-panel-inattivi" class="eventi-panel hidden">
+ <div id="eventi-list-inattivi"></div>
+ </div>
+ <div id="eventi-panel-passati" class="eventi-panel hidden">
+ <div id="eventi-list-passati"></div>
+ </div>
+ </div>
+ </div>
+
+ <!-- Form evento -->
+ <div id="ev-form-panel" class="modal-overlay hidden" onclick="chiudiFormEventoBackdrop(event)">
+ <div class="card modal-card" style="animation-delay:.05s">
+ <div class="card-head"><div class="card-head-icon">✏️</div><h2 id="ev-form-title">Nuovo evento</h2></div>
+ <div class="card-body">
+ <div class="ev-form-sections">
+ <div class="ev-form-section ev-main">
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Nome evento *</label>
+ <input type="text" id="ev-nome" placeholder="Biblioteca in Gioco" oninput="aggiornIdEvento(this)">
+ </div>
+ <div class="field first">
+ <label class="lbl">ID Evento <span class="id-auto-badge">auto</span></label>
+ <input type="text" id="ev-id" placeholder="biblioteca_in_gioco" class="id-auto-field" readonly>
+ </div>
+ </div>
+ <div class="row2">
+ <div class="field field-ev-data">
+ <label class="lbl">Data / periodo</label>
+ <input type="date" id="ev-data" min="2020-01-01" max="2030-12-31">
+ </div>
+ <div class="field">
+ <label class="lbl">Luogo</label>
+ <div class="tav-sistema-wrap">
+ <select id="ev-luogo" style="width:100%" onchange="onEvLuogoChange()">
+ <option value="">Seleziona luogo</option>
+ </select>
+ <button type="button" class="btn-add-sistema" title="Aggiungi luogo" onclick="aggiungiNuovoLuogoEvento(this)">+</button>
+ </div>
+ <input type="text" id="ev-luogo-indirizzo" placeholder="Indirizzo del luogo" style="margin-top:8px">
+ </div>
+ </div>
+ <div class="field">
+ <label class="lbl">Co-organizzatore <span style="opacity:.65;font-weight:400">(facoltativo)</span></label>
+ <select id="ev-sede-coorg" style="width:100%">
+ <option value="">— Nessuno —</option>
+ </select>
+ <p class="hint" style="margin:6px 0 0">Se impostato, anche questo co-organizzatore vede l’evento nella sua area (oltre al luogo principale).</p>
+ </div>
+ <div class="field">
+ <label class="lbl">Descrizione</label>
+ <textarea id="ev-desc" placeholder="Breve descrizione dell'evento..."></textarea>
+ </div>
+ <div class="field" style="display:flex;align-items:center;gap:10px">
+ <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'DM Mono',monospace;font-size:12px;color:var(--smoke)">
+ <input type="checkbox" id="ev-attivo" checked style="width:auto;accent-color:var(--ember)">
+ Evento attivo (visibile agli utenti)
+ </label>
+ </div>
+ </div>
+ <div class="ev-form-section ev-sessioni-section">
+ <div class="divider">Sessioni</div>
+ <p id="ev-sessioni-desc" style="font-size:14px;color:var(--smoke);font-style:italic;margin:0 0 10px">Tipo sessione: Prenotazioni Tavoli (di solito GDR), GDT / Gioco Libero (ingresso numerico, con lista giochi opzionale) o Panel (ingresso simile al gioco libero).</p>
+ <div id="sessioni-list" class="ev-accordion-list"></div>
+ <div class="ev-add-accordion">
+ <p class="hint">Aggiungi una nuova sessione in fondo alla lista.</p>
+ <button class="btn btn-o btn-sm" type="button" onclick="aggiungiSessione()">+ Sessione</button>
+ </div>
+ <div class="field" style="margin-top:10px">
+ <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
+ <input type="checkbox" id="ev-avviso-nuovi-giochi" style="width:auto;margin-top:2px">
+ <span class="lbl" style="margin:0">
+ Se aggiungo giochi a una sessione GDT, invia un'email a chi è già iscritto a quella sessione e ha lasciato l'indirizzo
+ </span>
+ </label>
+ </div>
+ </div>
+ <div class="ev-form-section ev-tavoli-section">
+ <div class="divider">Tavoli</div>
+ <p style="font-size:14px;color:var(--smoke);font-style:italic;margin:0 0 10px">Associa ogni tavolo alla sessione corretta.</p>
+ <div id="tavoli-form-list" class="ev-accordion-list"></div>
+ <div class="ev-add-accordion">
+ <p class="hint">Aggiungi un nuovo tavolo in fondo alla lista.</p>
+ <button class="btn btn-o btn-sm" type="button" onclick="aggiungiTavolo()">+ Tavolo</button>
+ </div>
+ <div class="field" style="margin-top:10px">
+ <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
+ <input type="checkbox" id="ev-avviso-nuovi-tavoli" style="width:auto;margin-top:2px">
+ <span class="lbl" style="margin:0">
+ Se aggiungo nuovi tavoli, invia email agli utenti dell'evento non ancora iscritti a questa sessione
+ </span>
+ </label>
+ </div>
+ </div>
+ </div>
+ </div>
+ <div class="ev-form-footer act-bar" style="margin-top:0;padding-top:0;border-top:none">
+ <button id="ev-form-save-btn" class="btn btn-s btn-lg" onclick="salvaEventoForm()">💾 Salva evento</button>
+ <button class="btn btn-o" onclick="chiudiFormEvento()">✕ Annulla</button>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- TAB: Setup iniziale -->
+ <div id="t-setup" class="tab-panel">
+ <div class="card">
+ <div class="card-head"><div class="card-head-icon">🔧</div><h2>Setup iniziale</h2></div>
+ <div class="card-body">
+ <p style="font-size:15px;color:var(--smoke);font-style:italic;line-height:1.7;margin-bottom:22px;border-left:3px solid var(--ember);padding-left:14px">
+ Questo pannello va usato <strong>una sola volta</strong> per preparare la struttura dei Google Sheet (Config e Risposte).<br>
+ Crea i fogli <code>Config</code>, <code>Eventi</code>, <code>Sessioni</code>, <code>Tavoli</code> con le intestazioni corrette e un foglio di esempio nel file Risposte.
+ </p>
+
+ <!-- Stato setup -->
+ <div id="setup-status" style="display:none;margin-bottom:20px"></div>
+
+ <!-- Step 1: verifica IDs -->
+ <div class="card" style="margin-bottom:0;box-shadow:none;border:1px solid var(--vellum)">
+ <div style="background:var(--parch2);border-bottom:1px solid var(--vellum);padding:12px 18px;display:flex;align-items:center;gap:10px">
+ <span style="background:var(--ember);color:#fff;font-family:var(--font-m);font-size:11px;font-weight:500;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center">1</span>
+ <span style="font-family:var(--font-d);font-size:13px;color:var(--ember2);letter-spacing:.05em">ID Google Sheet</span>
+ </div>
+ <div style="padding:18px">
+ <p style="font-size:13.5px;color:var(--smoke);margin-bottom:16px;font-style:italic">
+ Gli ID sono già definiti nel file <code>Code.gs</code> come costanti. Verificali qui prima di procedere.
+ </p>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">SHEET_CONFIG_ID</label>
+ <input type="text" id="setup-config-id" placeholder="13y_V26ZOl5ty…" style="font-family:var(--font-m);font-size:12px">
+ <p class="hint">Foglio di configurazione (Config/Eventi/Sessioni/Tavoli)</p>
+ </div>
+ <div class="field first">
+ <label class="lbl">SHEET_RISPOSTE_ID</label>
+ <input type="text" id="setup-risposte-id" placeholder="15X_pNDeVO1nb…" style="font-family:var(--font-m);font-size:12px">
+ <p class="hint">Foglio delle risposte (un tab per evento)</p>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <div style="margin:18px 0;display:flex;align-items:center;justify-content:center">
+ <span style="color:var(--vellum2);font-size:22px">↓</span>
+ </div>
+
+ <!-- Step 2: esegui setup -->
+ <div class="card" style="margin-bottom:0;box-shadow:none;border:1px solid var(--vellum)">
+ <div style="background:var(--parch2);border-bottom:1px solid var(--vellum);padding:12px 18px;display:flex;align-items:center;gap:10px">
+ <span style="background:var(--ember);color:#fff;font-family:var(--font-m);font-size:11px;font-weight:500;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center">2</span>
+ <span style="font-family:var(--font-d);font-size:13px;color:var(--ember2);letter-spacing:.05em">Crea struttura fogli</span>
+ </div>
+ <div style="padding:18px">
+ <p style="font-size:13.5px;color:var(--smoke);margin-bottom:18px;font-style:italic">
+ Verrà eseguita la funzione <code>setupFogliConfig()</code> che crea i fogli necessari <strong>solo se non esistono già</strong>. Dopo il setup vengono applicate automaticamente le <strong>migrazioni</strong> (aggiunta colonne, allineamento dati) anche sui fogli già esistenti. È un'operazione sicura e idempotente.
+ </p>
+
+ <!-- Checklist visiva -->
+ <div style="display:grid;gap:8px;margin-bottom:22px">
+ <div class="setup-check" id="chk-config">⬜ Foglio <strong>Config</strong> (chiave / valore / descrizione)</div>
+ <div class="setup-check" id="chk-eventi">⬜ Foglio <strong>Eventi</strong> (eventId / nome / data / luogo / indirizzoLuogo / descrizione / attivo)</div>
+ <div class="setup-check" id="chk-sessioni">⬜ Foglio <strong>Sessioni</strong> (eventId / sessioneId / nome / orario / attivo / maxPosti / tipoSessione / fasciaEtaMinima / giochiDisponibili)</div>
+ <div class="setup-check" id="chk-tavoli">⬜ Foglio <strong>Tavoli</strong> (eventId / sessioneId / id / gioco / tipo / max / occupati / fasce / partecipanti / attivo / sistemaGioco / titoloAvventura / descrizione / fasciaEtaMinima / master / mostraMaster / descrizioneTavolo)</div>
+ <div class="setup-check" id="chk-avventure">⬜ Foglio <strong>Avventure</strong> (avventuraId / masterId / masterNick / titoloAvventura / sistemaGioco / livello / tipo / max / occupati / descrizione / tema / ambientazione / fasciaEtaMinima / mostraMaster / attivo / createdAt / updatedAt / tono / tematicheSensibili)</div>
+ <div class="setup-check" id="chk-avventure-tavoli">⬜ Foglio <strong>AvventureTavoli</strong> (linkId / avventuraId / tavoloId / createdAt – FK verso tavolo; evento/sessione solo sul foglio Tavoli)</div>
+ <div class="setup-check" id="chk-fasce-eta">⬜ Foglio <strong>FasceEta</strong> (fasciaId / fascia / ordine / attivo / note)</div>
+ <div class="setup-check" id="chk-sistemi-gioco">⬜ Foglio <strong>SistemiGioco</strong> (sistema / attivo / ordine / note)</div>
+ <div class="setup-check" id="chk-luoghi">⬜ Foglio <strong>Luoghi</strong> (nomeLuogo / indirizzo / attivo / createdAt / updatedAt / note)</div>
+ <div class="setup-check" id="chk-utenti">⬜ Foglio <strong>Utenti</strong> (uuid / email / nome / cellulare / primaPrenotazione / ultimaPrenotazione / totPrenotazioni / eventiDiversi / note)</div>
+ <div class="setup-check" id="chk-avvisi-eventi">⬜ Foglio <strong>AvvisiEventi</strong> (storico invii evento/utente – avvisoId / eventId / uuid / email / nome / destinatarioTipo / stato / sentAt / errore / note)</div>
+ <div class="setup-check" id="chk-masters">⬜ Foglio <strong>Masters</strong> (masterId / nome / nick / email / cellulare / primaAssegnazione / ultimaAssegnazione / totTavoli / eventiDiversi / sessioniDiverse / note)</div>
+ <div class="setup-check" id="chk-partecipanti">⬜ Foglio <strong>Partecipanti</strong> (co-prenotanti / inviti – participantId / bookingId / eventId / sessioneId / ownerUuid / participantUuid / nome / email / statoInvito / ruolo / inviteToken / tokenScadenzaIso / createdAt / updatedAt / nomeCompleto)</div>
+ <div class="setup-check" id="chk-amicizie">⬜ Foglio <strong>Amicizie</strong> (rubrica utente – friendId / ownerUuid / nome / email / cellulare / note / createdAt / updatedAt / stato)</div>
+ <div class="setup-check" id="chk-migrazioni">⬜ Foglio <strong>Migrazioni</strong> (id / descrizione / data_esecuzione – log migrazioni schema)</div>
+ <div class="setup-check" id="chk-risposte">⬜ Foglio <strong>_ESEMPIO</strong> nel file Risposte (intestazioni)</div>
+ </div>
+
+ <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+ <button class="btn btn-s btn-lg" onclick="eseguiSetup()" id="setup-btn">🔧 Esegui Setup iniziale</button>
+ <button class="btn btn-o btn-sm" onclick="verificaSetup()" id="setup-verify-btn">🔍 Verifica struttura</button>
+ <button class="btn btn-o btn-sm" onclick="eseguiMigrazioniSetup()" id="setup-mig-btn">📦 Esegui migrazioni</button>
+ </div>
+ <p style="font-size:12px;color:var(--ash);margin-top:10px">
+ <strong>Migrazioni</strong>: aggiornano fogli già esistenti (es. aggiunta colonna Stato in Risposte, spostamento dati). Eseguile dopo un aggiornamento dell'app se hai fogli creati con versioni precedenti.
+ </p>
+ </div>
+ </div>
+
+ <div style="margin:18px 0;display:flex;align-items:center;justify-content:center">
+ <span style="color:var(--vellum2);font-size:22px">↓</span>
+ </div>
+
+ <!-- Step 3: genera hash password -->
+ <div class="card" style="margin-bottom:0;box-shadow:none;border:1px solid var(--vellum)">
+ <div style="background:var(--parch2);border-bottom:1px solid var(--vellum);padding:12px 18px;display:flex;align-items:center;gap:10px">
+ <span style="background:var(--ember);color:#fff;font-family:var(--font-m);font-size:11px;font-weight:500;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center">3</span>
+ <span style="font-family:var(--font-d);font-size:13px;color:var(--ember2);letter-spacing:.05em">Genera hash password organizzatore</span>
+ </div>
+ <div style="padding:18px">
+ <p style="font-size:13.5px;color:var(--smoke);margin-bottom:16px;font-style:italic">
+ Genera l'hash SHA-256 della tua password. Verrà salvato automaticamente nel foglio <code>Config</code> alla chiave <code>org_password_hash</code>.
+ </p>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Nuova password</label>
+ <div class="pwd-wrap">
+ <input type="password" id="hash-pwd" placeholder="••••••••••">
+ <button class="pwd-tog" onclick="togglePwd('hash-pwd')" type="button">👁</button>
+ </div>
+ </div>
+ <div class="field first">
+ <label class="lbl">Conferma password</label>
+ <div class="pwd-wrap">
+ <input type="password" id="hash-pwd2" placeholder="••••••••••">
+ <button class="pwd-tog" onclick="togglePwd('hash-pwd2')" type="button">👁</button>
+ </div>
+ </div>
+ </div>
+ <div style="margin-top:14px">
+ <button class="btn btn-g btn-sm" onclick="generaHash()">🔑 Genera hash</button>
+ </div>
+ <div id="hash-result" class="hidden" style="margin-top:16px">
+ <div style="background:var(--ink2);border-radius:var(--radius-s);padding:14px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+ <code id="hash-value" style="color:var(--gold2);font-family:var(--font-m);font-size:12px;word-break:break-all;flex:1;background:transparent;border:none;padding:0"></code>
+ <button class="btn btn-o btn-sm" onclick="copiaHash()" style="border-color:var(--gold2);color:var(--gold2);flex-shrink:0">📋 Copia</button>
+ </div>
+ <div style="margin-top:12px">
+ <button class="btn btn-s" onclick="salvaHashSuSheet()" id="btn-salva-hash">💾 Salva nel foglio Config</button>
+ </div>
+ <p style="font-size:12.5px;color:var(--smoke);font-style:italic;margin-top:10px">
+ Clicca <strong>Salva nel foglio Config</strong> per scrivere l'hash alla chiave <code>org_password_hash</code>. Da quel momento la nuova password sarà attiva immediatamente, senza toccare il codice.
+ </p>
+ </div>
+ </div>
+ </div>
+
+ <div style="margin:18px 0;display:flex;align-items:center;justify-content:center">
+ <span style="color:var(--vellum2);font-size:22px">↓</span>
+ </div>
+
+ <!-- Step 4: Test email -->
+ <div class="card" style="margin-bottom:0;box-shadow:none;border:1px solid var(--vellum)">
+ <div style="background:var(--parch2);border-bottom:1px solid var(--vellum);padding:12px 18px;display:flex;align-items:center;gap:10px">
+ <span style="background:var(--ember);color:#fff;font-family:var(--font-m);font-size:11px;font-weight:500;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center">4</span>
+ <span style="font-family:var(--font-d);font-size:13px;color:var(--ember2);letter-spacing:.05em">Test email</span>
+ </div>
+ <div style="padding:18px">
+ <p style="font-size:13.5px;color:var(--smoke);margin-bottom:12px;font-style:italic">
+ Invia email di prova all'indirizzo configurato in <code>EMAIL_TEST_NOTIFICHE</code> (oppure agli organizzatori se vuoto), per verificare i template.
+ </p>
+ <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+ <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;color:var(--ink2);max-width:520px">
+ <input type="checkbox" id="cfg-email-test-ok" style="margin-top:4px" onchange="salvaEmailTestOk()">
+ <span>
+ <strong>Le email di test funzionano</strong>
+ <div style="font-size:12.5px;color:var(--ash);font-style:italic;margin-top:4px">
+ Spunta dopo aver verificato i template dopo l'ultimo invio di test.
+ </div>
+ </span>
+ </label>
+ <div id="email-test-last-proof-badge" style="font-size:12.5px;color:var(--ash);font-style:italic;white-space:nowrap">
+ ✅ ultima prova: <span id="email-test-last-proof">—</span>
+ </div>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Tipo di email da testare</label>
+ <select id="test-email-tipo">
+ <option value="tutte">Tutte le principali (consigliato)</option>
+ <option value="conferma">Conferma prenotazione singola</option>
+ <option value="multi">Conferma prenotazione multi-tavolo</option>
+ <option value="modifica">Modifica / aggiornamento prenotazione</option>
+ <option value="lista_attesa">Iscrizione lista d'attesa</option>
+ <option value="posto_disponibile">Posto assegnato da lista d'attesa</option>
+ </select>
+ <p class="hint">I contenuti saranno marcati come <strong>[TEST]</strong> e non influenzano i dati reali.</p>
+ </div>
+ </div>
+ <div style="margin-top:10px">
+ <button class="btn btn-o btn-sm" onclick="inviaEmailTestSetup()">✉️ Invia email di prova</button>
+ </div>
+ </div>
+ </div>
+
+ <div style="margin:18px 0;display:flex;align-items:center;justify-content:center">
+ <span style="color:var(--vellum2);font-size:22px">↓</span>
+ </div>
+
+ <!-- Step 5: Opzioni avanzate -->
+ <div class="card" style="margin-bottom:0;box-shadow:none;border:1px solid var(--vellum)">
+ <div style="background:var(--parch2);border-bottom:1px solid var(--vellum);padding:12px 18px;display:flex;align-items:center;gap:10px">
+ <span style="background:var(--ember);color:#fff;font-family:var(--font-m);font-size:11px;font-weight:500;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center">5</span>
+ <span style="font-family:var(--font-d);font-size:13px;color:var(--ember2);letter-spacing:.05em">Opzioni avanzate</span>
+ </div>
+ <div style="padding:18px">
+ <p style="font-size:13.5px;color:var(--smoke);margin-bottom:12px;font-style:italic">
+ Qui puoi abilitare il comportamento avanzato della lista d'attesa. Se disattivato (default), quando si libera un posto viene scelto
+ il primo iscritto che ha quel tavolo tra le preferenze, in ordine cronologico.
+ </p>
+ <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;color:var(--ink2)">
+ <input type="checkbox" id="cfg-waitlist-priority" style="margin-top:4px">
+ <span>
+ <strong>Usa anche la priorità delle preferenze</strong><br>
+ <span style="font-size:13px;color:var(--smoke);font-style:italic">
+ Se attivo, a parità di compatibilità verranno considerati prima i tavoli indicati come preferenza #1, poi #2, e così via.
+ </span>
+ </span>
+ </label>
+ <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;color:var(--ink2);margin-top:10px">
+ <input type="checkbox" id="cfg-waitlist-actions" style="margin-top:4px">
+ <span>
+ <strong>Abilita bottone "Annulla liste" lista d'attesa</strong><br>
+ <span style="font-size:13px;color:var(--smoke);font-style:italic">
+ Mostra su mappa tavoli il pulsante <em>Annulla liste</em> (rimozione preferenze) per questo tavolo.
+ </span>
+ </span>
+ </label>
+ <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;color:var(--ink2);margin-top:10px">
+ <input type="checkbox" id="cfg-waitlist-promemoria" style="margin-top:4px">
+ <span>
+ <strong>Abilita bottone "Invia promemoria" lista d'attesa</strong><br>
+ <span style="font-size:13px;color:var(--smoke);font-style:italic">
+ Mostra su mappa tavoli il pulsante <em>Invia</em> (promemoria ai primi N utenti).
+ </span>
+ </span>
+ </label>
+ <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;color:var(--ink2);margin-top:10px">
+ <input type="checkbox" id="cfg-export-csv-evento" style="margin-top:4px">
+ <span>
+ <strong>Abilita export CSV per evento</strong><br>
+ <span style="font-size:13px;color:var(--smoke);font-style:italic">
+ Mostra il bottone <em>Esporta CSV evento</em> e abilita la funzione backend di esportazione.
+ </span>
+ </span>
+ </label>
+ <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;color:var(--ink2);margin-top:10px">
+ <input type="checkbox" id="cfg-email-copia-archivio" style="margin-top:4px" checked onchange="syncCopiaArchivioCheckboxes()">
+ <span>
+ <strong>Copia archivio (email transazionali)</strong><br>
+ <span style="font-size:13px;color:var(--smoke);font-style:italic">
+ Se attivo, dopo l’email al destinatario viene inviata una seconda copia verso il monitor prenotazioni (<code>EMAIL_BCC_MONITOR</code>). Disattiva per ridurre gli invii MailApp.
+ </span>
+ </span>
+ </label>
+ <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;color:var(--ink2);margin-top:10px">
+ <input type="checkbox" id="cfg-email-copia-archivio-avvisi" style="margin-top:4px" checked onchange="syncCopiaArchivioCheckboxes()">
+ <span>
+ <strong>Copia archivio per notifiche di massa (Avvisi eventi)</strong><br>
+ <span style="font-size:13px;color:var(--smoke);font-style:italic">
+ Si applica a <em>Invia notifica nuovo evento</em> e <em>avviso nuovi tavoli</em> (secondo invio verso <code>EMAIL_BCC_AVVISI</code>). Disattivala per risparmiare molta quota quando mandi molte email.
+ </span>
+ </span>
+ </label>
+ <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;color:var(--ink2);margin-top:10px">
+ <input type="checkbox" id="cfg-email-log-org" style="margin-top:4px" checked>
+ <span>
+ <strong>Email log operative organizzatore</strong><br>
+ <span style="font-size:13px;color:var(--smoke);font-style:italic">
+ Se attivo, invia le mail log operative verso <code>EMAIL_LOG</code> (es. <code>lagildadeidadi+applog@gmail.com</code>). Disattivalo per non ricevere questi log via email.
+ </span>
+ </span>
+ </label>
+ <div style="margin-top:10px">
+ <button class="btn btn-o btn-sm" onclick="salvaOpzioniConfig()">💾 Salva opzioni in Config</button>
+ </div>
+ </div>
+ </div>
+
+ <div style="margin:18px 0;display:flex;align-items:center;justify-content:center">
+ <span style="color:var(--vellum2);font-size:22px">↓</span>
+ </div>
+
+ <!-- Step 6: Trigger schedulati -->
+ <div class="card" style="margin-bottom:0;box-shadow:none;border:1px solid var(--vellum)">
+ <div style="background:var(--parch2);border-bottom:1px solid var(--vellum);padding:12px 18px;display:flex;align-items:center;gap:10px">
+ <span style="background:var(--ember);color:#fff;font-family:var(--font-m);font-size:11px;font-weight:500;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center">6</span>
+ <span style="font-family:var(--font-d);font-size:13px;color:var(--ember2);letter-spacing:.05em">Trigger schedulati</span>
+ </div>
+ <div style="padding:18px">
+ <p style="font-size:13.5px;color:var(--smoke);margin-bottom:12px;font-style:italic">
+ Configura e controlla i job automatici. Coda email ogni <strong>30 minuti</strong>; backup fogli Config/Risposte ogni giorno alle <strong>3:00</strong> (cartella Drive <code>Gilda Prenotazioni - Backup</code>, retention configurabile con <code>BACKUP_KEEP</code>).
+ </p>
+ <div style="display:flex;gap:8px;flex-wrap:wrap">
+ <button class="btn btn-o btn-sm" id="trigger-install-email-btn" onclick="installaTriggerCodaEmailDaUI()">⏱ Configura trigger coda email (30 min)</button>
+ <button class="btn btn-o btn-sm" id="trigger-install-backup-btn" onclick="installaTriggerBackupDaUI()">💾 Configura trigger backup giornaliero</button>
+ <button class="btn btn-o btn-sm" id="backup-run-btn" onclick="eseguiBackupFogliDaUI()">▶ Esegui backup ora</button>
+ <button class="btn btn-o btn-sm" id="trigger-refresh-btn" onclick="aggiornaStatoTriggerSchedulati()">↺ Aggiorna stato trigger</button>
+ </div>
+ <div id="trigger-status-panel" style="margin-top:12px;font-size:13px;color:var(--ink2);background:#fff;border:1px solid var(--vellum);border-radius:10px;padding:10px 12px">
+ Stato trigger non ancora caricato.
+ </div>
+ <div id="backup-status-panel" style="margin-top:10px;font-size:13px;color:var(--ink2);background:#fff;border:1px solid var(--vellum);border-radius:10px;padding:10px 12px">
+ Stato backup non ancora caricato.
+ </div>
+ </div>
+ </div>
+
+ <div style="margin:18px 0;display:flex;align-items:center;justify-content:center">
+ <span style="color:var(--vellum2);font-size:22px">↓</span>
+ </div>
+
+ <!-- Step 6: Ricostruisci foglio Utenti -->
+ <div class="card" style="margin-bottom:0;box-shadow:none;border:1px solid var(--vellum)">
+ <div style="background:var(--parch2);border-bottom:1px solid var(--vellum);padding:12px 18px;display:flex;align-items:center;gap:10px">
+ <span style="background:var(--ember);color:#fff;font-family:var(--font-m);font-size:11px;font-weight:500;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center">5</span>
+ <span style="font-family:var(--font-d);font-size:13px;color:var(--ember2);letter-spacing:.05em">Ricostruisci foglio Utenti</span>
+ </div>
+ <div style="padding:18px">
+ <p style="font-size:13.5px;color:var(--smoke);margin-bottom:12px;font-style:italic">
+ Esegui questo job per popolare o riallineare il foglio <code>Utenti</code> usando <strong>tutte</strong> le prenotazioni presenti nel file Risposte (anche storiche).
+ </p>
+ <button class="btn btn-o btn-sm" onclick="runRicostruisciUtenti()">🧮 Ricostruisci elenco utenti da Risposte</button>
+ <button class="btn btn-o btn-sm" onclick="runRicostruisciMasters()">🧙 Ricostruisci elenco master da Tavoli</button>
+ <button class="btn btn-o btn-sm" onclick="orgRicostruisciAvventureLegacyDaTavoli()">🧩 Ricostruisci Avventure (legacy)</button>
+ <button class="btn btn-o btn-sm" onclick="runRipristinoStoricoSicuro()">🩹 Ripristino storico sicuro</button>
+ <div style="height:10px"></div>
+ <div style="font-size:12.5px;color:var(--ash);font-style:italic;margin-bottom:8px">
+ Reset manutenzione fogli (operazione avanzata).
+ </div>
+ <div style="display:flex;gap:8px;flex-wrap:wrap">
+ <button class="btn btn-o btn-sm" onclick="runResetFogliSetup('soft')">🧹 Reset soft</button>
+ <button class="btn btn-d btn-sm" onclick="runResetFogliSetup('hard')">💣 Reset hard</button>
+ </div>
+ </div>
+ </div>
+
+ </div>
+ </div>
+ </div>
+
+ <p style="margin-top:20px;text-align:center;font-size:13px;color:var(--ash)"><a href="#" onclick="event.preventDefault();apriFeedback('dashboard_organizzatore')" style="color:var(--ember);border-bottom:1px dashed var(--ember)">Lascia un feedback</a></p>
+ </div><!-- /org-main -->
+
+ <!-- ═══ FORM REGISTRAZIONE (HOME) ═══ -->
+ <div id="reg-main" class="hidden">
+ <div id="reg-fa"></div>
+
+ <!-- Invito co-prenotante: riepilogo prenotazione → accetta/rifiuta → nome → conferma -->
+ <div id="invite-partecipante-wrap" class="hidden invite-partecipante-wrap">
+ <div id="invite-partecipante-inner"></div>
+ </div>
+
+ <!-- Torna alle prenotazioni (solo quando utente è loggato con UUID) -->
+ <div id="reg-torna-user-bar" class="home-recupera-bar hidden" style="margin-bottom:12px">
+ <a href="#" onclick="event.preventDefault();tornaDaRegAUserArea()" class="home-recupera-link">← Torna alle tue prenotazioni</a>
+ </div>
+
+ <!-- Barra recupero link: sempre visibile in home (utenti già iscritti) -->
+ <div class="home-recupera-bar" id="reg-recupera-bar">
+ <span class="home-recupera-txt">Hai già prenotato in passato?</span>
+ <a href="#" onclick="mostraRecupera(event)" class="home-recupera-link">🔗 Recupera link prenotazioni</a>
+ </div>
+
+ <div id="reg-panel">
+
+ <!-- Intro home (step 1) -->
+ <div id="reg-home-intro" class="reg-home-intro">
+ <p class="reg-home-intro-p" id="reg-home-intro-p">Prenota in <strong>4 passi</strong>: scegli l'evento, inserisci i tuoi dati, seleziona i tavoli e infine conferma eventuali partecipanti. Riceverai un'email con il link per modificare la prenotazione quando vuoi.</p>
+ </div>
+
+ <!-- ── STEP INDICATOR ── -->
+ <div class="reg-steps" id="reg-steps">
+ <div class="reg-step active" id="rs-1">
+ <div class="rs-num">1</div>
+ <div class="rs-lbl">📜 Evento</div>
+ </div>
+ <div class="rs-line" id="rs-line-1"></div>
+ <div class="reg-step" id="rs-2">
+ <div class="rs-num">2</div>
+ <div class="rs-lbl" id="rs-2-lbl">📝 Dati</div>
+ </div>
+ <div class="rs-line rs-gdr-only" id="rs-line-2"></div>
+ <div class="reg-step rs-gdr-only" id="rs-3">
+ <div class="rs-num">3</div>
+ <div class="rs-lbl">🎲 Tavolo</div>
+ </div>
+ <div class="rs-line rs-gdr-only" id="rs-line-3"></div>
+ <div class="reg-step rs-gdr-only" id="rs-4">
+ <div class="rs-num">4</div>
+ <div class="rs-lbl">👥 Partecipanti</div>
+ </div>
+ </div>
+
+ <!-- ── STEP 1: scegli evento, poi il tipo se l'evento è misto ── -->
+ <div id="reg-s1">
+ <div id="reg-s1-lista">
+ <div class="reg-step-title">📜 Scegli un evento</div>
+ <p class="reg-step-desc">Clicca sulla card dell'evento a cui vuoi partecipare per vedere le aree e i tavoli disponibili. Sulle card compaiono i badge <strong>GDR</strong> (gioco di ruolo) e <strong>GDT</strong> (gioco da tavolo) in base a cosa è previsto per quell'evento.</p>
+ <div id="reg-ev-grid" class="reg-ev-grid"></div>
+ </div>
+ <div id="reg-misto-scelta" class="hidden">
+ <div class="reg-step-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+ <span>Che cosa vuoi prenotare?</span>
+ <span style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+ <button type="button" class="rec-foot-btn" onclick="regApriDettaglioMisto()">Dettaglio</button>
+ <button class="btn btn-o btn-sm" type="button" onclick="regTornaStep1()">← Cambia evento</button>
+ </span>
+ </div>
+ <p class="reg-step-desc">Questo evento ha più aree di gioco: GDR e GDT. Scegline un'area: per partecipare a entrambi fai due prenotazioni distinte.</p>
+ <div class="reg-misto-grid">
+ <button type="button" class="reg-misto-card" onclick="regScegliTipoMisto('gdr')">
+ <span class="rec-pill ev-tipo ev-tipo-gdr">GDR</span>
+ <span class="reg-misto-nome">Tavoli</span>
+ <span class="reg-misto-sub">Prenota un tavolo di gioco di ruolo.</span>
+ </button>
+ <button type="button" class="reg-misto-card" onclick="regScegliTipoMisto('gdt')">
+ <span class="rec-pill ev-tipo ev-tipo-gdt">GDT</span>
+ <span class="reg-misto-nome">Gioco libero</span>
+ <span class="reg-misto-sub">Ingresso all'area di giochi da tavolo.</span>
+ </button>
+ </div>
+ </div>
+ </div>
+
+ <!-- ── STEP 3: scegli sessione + tavolo ── -->
+ <div id="reg-s2" class="hidden">
+ <div class="reg-step-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+ <span id="reg-s2-title">📜 Evento selezionato</span>
+ <button class="btn btn-o btn-sm" onclick="regTornaStep2()">← Torna ai dati</button>
+ </div>
+ <p class="reg-step-desc">Scegli uno o più tavoli in ordine di preferenza: proveremo ad assegnarti il primo disponibile. Se non ci sono posti, entrerai in lista d'attesa con le preferenze indicate.</p>
+
+ <div id="reg-sess-wrap" class="hidden" style="margin-bottom:20px">
+ <div style="font-family:var(--font-m);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ash);margin-bottom:10px">🧭 Seleziona l'area</div>
+ <div id="reg-sess-pills" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+ </div>
+
+ <!-- Mini riepilogo selezione corrente -->
+ <div id="reg-sel-summary" class="hidden" style="margin:0 0 14px;background:linear-gradient(135deg,var(--parch2),var(--parch3));border:1.5px solid var(--vellum);border-left:4px solid var(--ember);border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--smoke);line-height:1.7">
+ <div style="font-family:var(--font-m);font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--ash);margin-bottom:5px">Selezione attuale</div>
+ <div id="reg-sel-text"></div>
+ </div>
+
+ <div id="reg-tav-grid" class="reg-tav-grid"></div>
+
+ <div id="reg-attesa-row" class="hidden" style="margin-top:16px">
+ <div class="reg-tav-attesa-card" id="rtc-attesa" onclick="regToggleAttesa()">
+ <span style="font-size:18px">⏳</span>
+ <div>
+ <div style="font-family:var(--font-d);font-size:13px;color:var(--gold);letter-spacing:.04em">Iscriviti alla lista d'attesa</div>
+ <div style="font-size:12px;color:var(--ash);font-style:italic;margin-top:2px">Indica i tavoli preferiti: ti avviseremo se si libera un posto.</div>
+ </div>
+ </div>
+ <div id="reg-attesa-dati" class="hidden" style="margin-top:12px;padding:14px 16px;background:var(--parch2);border:1px solid var(--vellum);border-radius:var(--radius);border-left:4px solid var(--gold)" onclick="event.stopPropagation()">
+ <div class="lbl-fasce" style="margin-bottom:8px">👥 Numero persone</div>
+ <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+ <button type="button" class="qty-btn" onclick="regAttesaCambiaQty(-1)">−</button>
+ <span class="qty-val" id="reg-attesa-num-val">1</span>
+ <button type="button" class="qty-btn" onclick="regAttesaCambiaQty(1)">+</button>
+ </div>
+ <div class="lbl-fasce" style="margin-bottom:8px">🎯 Fasce età del gruppo</div>
+ <div class="fasce-grid" id="reg-attesa-fasce-chips"></div>
+ <div class="tav-fasce-req" id="reg-attesa-fasce-req">Seleziona almeno una fascia età</div>
+
+ <div class="lbl-fasce" style="margin:16px 0 4px">🎲 Tavoli preferiti per questa sessione</div>
+ <p id="reg-attesa-pref-hint" style="margin:0 0 6px;font-size:12px;color:var(--ash);font-style:italic">
+ Seleziona i tavoli pieni su cui vuoi essere messo in lista d'attesa.
+ </p>
+ <div id="reg-attesa-pref" class="fasce-grid"></div>
+ <div class="tav-fasce-req" id="reg-attesa-pref-req">Seleziona almeno un tavolo preferito</div>
+
+ <div class="lbl-fasce" style="margin:16px 0 4px">⏰ Avviso nelle ultime ore</div>
+ <p style="margin:0 0 6px;font-size:12px;color:var(--ash);font-style:italic">
+ Per impostazione predefinita verrai considerato solo se si libera un posto <strong>più di 24 ore</strong> prima dell'inizio.
+ Se vuoi essere considerato anche nelle <strong>ultime ore</strong> prima dell'inizio, indica entro quante ore prima sei disponibile ad essere assegnato automaticamente.
+ </p>
+ <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+ <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+ <input type="checkbox" id="reg-attesa-last-chk" style="width:auto">
+ <span>Considerami anche nelle ultime</span>
+ </label>
+ <input type="number" id="reg-attesa-last-ore" min="1" max="24" value="6" style="width:64px;padding:4px 6px;font-size:13px">
+ <span>ore prima dell'inizio</span>
+ </div>
+ </div>
+ </div>
+
+ <div style="margin-top:20px">
+ <button class="btn btn-s btn-lg btn-full" id="reg-s2-next" onclick="regPassaStep4()" disabled>Continua ai partecipanti →</button>
+ </div>
+ </div>
+
+ <!-- ── STEP 2: dati personali (GDR) / iscrizione posti (GDT) ── -->
+ <div id="reg-s3" class="hidden">
+ <div class="reg-step-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:20px">
+ <span id="reg-s3-title">📝 I tuoi dati</span>
+ <span style="display:flex;gap:8px;flex-wrap:wrap">
+ <button class="btn btn-o btn-sm hidden" id="reg-misto-cambia" type="button" onclick="regMostraSceltaMisto()">← Cambia tipo</button>
+ <button class="btn btn-o btn-sm" type="button" onclick="regTornaStep1()">← Cambia evento</button>
+ </span>
+ </div>
+ <p class="reg-step-desc" id="reg-s3-desc">Inserisci i dati del prenotante, poi prosegui alla scelta dei tavoli.</p>
+
+ <div id="reg-gdt-sess-wrap" class="hidden" style="margin-bottom:16px">
+ <div style="font-family:var(--font-m);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ash);margin-bottom:10px">🧭 Seleziona l'area</div>
+ <div id="reg-gdt-sess-pills" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+ </div>
+
+ <!-- Blocco GDT: numero posti -->
+ <div id="reg-gdt-block" class="hidden" style="margin-bottom:18px">
+ <div class="card" style="margin:0;box-shadow:none;border:1.5px solid var(--vellum)">
+ <div class="card-body">
+ <div id="reg-gdt-capienza" style="font-size:13px;color:var(--smoke);margin-bottom:12px"></div>
+ <div id="reg-gdt-giochi-wrap" class="hidden" style="margin:0 0 14px">
+ <button type="button" class="btn btn-o btn-sm" id="reg-gdt-giochi-btn" onclick="apriRegGdtGiochiPopup()">🎲 Giochi presenti</button>
+ </div>
+ <div class="lbl-fasce" style="margin-bottom:8px">👥 Quante persone siete?</div>
+ <div style="display:flex;align-items:center;gap:10px">
+ <button type="button" class="qty-btn" id="reg-gdt-qty-minus" onclick="regGdtCambiaQty(-1)" disabled>−</button>
+ <span class="qty-val" id="reg-gdt-num-val">1</span>
+ <button type="button" class="qty-btn" id="reg-gdt-qty-plus" onclick="regGdtCambiaQty(1)" disabled>+</button>
+ </div>
+ <div id="reg-gdt-limite-warn" class="hidden" role="status" style="margin:12px 0 0;padding:12px 14px;background:rgba(230,81,0,.08);border-radius:var(--radius);border-left:4px solid var(--warn);font-size:13.5px;color:var(--ink);line-height:1.45"></div>
+ <div class="lbl-fasce" id="reg-gdt-fasce-lbl" style="margin:16px 0 8px">🎯 Fasce età del gruppo</div>
+ <div class="fasce-grid" id="reg-gdt-fasce-chips"></div>
+ <div class="tav-fasce-req" id="reg-gdt-fasce-req">Seleziona almeno una fascia età</div>
+ <p class="hint" style="margin-top:10px;margin-bottom:0">Non serve indicare i nominativi: conta il numero di posti e le fasce età.</p>
+ </div>
+ </div>
+ </div>
+
+ <p id="reg-dati-prefill-msg" class="hidden" style="font-size:13px;color:var(--ember);margin-bottom:12px;padding:10px 14px;background:rgba(192,90,30,.08);border-radius:var(--radius);border-left:4px solid var(--ember)">✓ I tuoi dati sono stati inseriti automaticamente e non sono modificabili.</p>
+
+ <div class="card" id="reg-s3-dati" style="margin-top:0;box-shadow:none;border:1.5px solid var(--vellum)">
+ <div class="card-body">
+ <p id="reg-dati-gdt-note" class="hint hidden" style="margin-top:0">Nome e email servono per ricevere la conferma e gli avvisi sull'evento.</p>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl" id="lbl-r-nome">Nome e Cognome *</label>
+ <input type="text" id="r-nome" placeholder="Mario Rossi" oninput="regAggiornaBloccoEmail()">
+ </div>
+ <div class="field first">
+ <label class="lbl" id="lbl-r-email">Email *</label>
+ <input type="email" id="r-email" placeholder="mario@email.it" oninput="regAggiornaBloccoEmail()">
+ <p id="r-email-format" class="hint hidden" style="color:var(--err);font-weight:600">Per continuare, l'indirizzo deve contenere @.</p>
+ <p id="reg-avv-warning" class="hint hidden" style="color:var(--err);font-weight:600"></p>
+ <p id="reg-dup-warning" class="hint hidden" style="color:var(--err);font-weight:600"></p>
+ </div>
+ </div>
+ <div class="field">
+ <label class="lbl">Cellulare <span class="lbl-note">facoltativo</span></label>
+ <input type="tel" id="r-cell" placeholder="+39 333 1234567">
+ <p class="hint">Utile solo per comunicazioni urgenti.</p>
+ </div>
+ <div class="row2" style="margin-top:4px">
+ <div class="field first" style="grid-column:1/-1">
+ <label class="lbl">Come ci hai conosciuto? <span class="lbl-note">facoltativo</span></label>
+ <select id="r-fonte">
+ <option value="">— Facoltativo —</option>
+ <option>Passaparola</option>
+ <option>Social media</option>
+ <option>Locandina/volantino</option>
+ <option>Sito web</option>
+ <option>Biblioteca</option>
+ <option>Altro</option>
+ </select>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <div id="reg-s3-actions" style="margin-top:20px">
+ <button class="btn btn-s btn-lg btn-full" id="reg-s3-next" onclick="regPassaStep3()">Continua alla scelta tavoli →</button>
+ <button class="btn btn-s btn-lg btn-full hidden" id="reg-gdt-submit" onclick="inviaRegGdt()" disabled>Invia Informazioni →</button>
+ </div>
+ </div>
+
+ <!-- ── STEP 4: partecipanti + conferma ── -->
+ <div id="reg-s4" class="hidden">
+ <div id="reg-riepilogo" class="reg-riepilogo"></div>
+ <div class="reg-step-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:20px">
+ <span>👥 Partecipanti e conferma</span>
+ <button class="btn btn-o btn-sm" onclick="regTornaStep3()">← Torna ai tavoli</button>
+ </div>
+ <p class="reg-step-desc">Se prenoti per altri, aggiungi qui i partecipanti. Altrimenti puoi confermare subito.</p>
+
+ <div style="margin-top:8px">
+ <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;color:var(--ink2)">
+ <input type="checkbox" id="reg-owner-partecipa" style="margin-top:3px" onchange="regTogglePrenotantePartecipa()">
+ <span>
+ <strong>Prenoto per altri e non partecipo personalmente</strong><br>
+ <span style="font-size:12.5px;color:var(--ash);font-style:italic">
+ Attivalo se il prenotante è un genitore/tutore e il partecipante reale è un'altra persona (es. figlio).
+ </span>
+ </span>
+ </label>
+ </div>
+ <div id="reg-partecipanti-wrap" class="hidden" style="margin-top:12px">
+ <label class="lbl">Altri partecipanti <span class="lbl-note">facoltativo</span></label>
+ <p class="hint" id="reg-partecipanti-hint">Nome o nickname per ogni co-prenotante (in ordine: prima i posti del primo tavolo, poi del secondo, e così via).<br>Se inserisci anche l'email riceveranno l'invito e potranno gestire insieme a te la prenotazione.</p>
+ <div id="reg-partecipanti-list" style="display:grid;gap:8px"></div>
+ <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+ <span id="reg-partecipanti-count" style="font-size:12px;color:var(--ash)"></span>
+ </div>
+ </div>
+ <div style="margin-top:20px">
+ <button class="btn btn-s btn-lg btn-full" id="r-submit" onclick="inviaReg()" disabled>✅ Conferma prenotazione</button>
+ </div>
+ </div>
+
+ <!-- link recupera e feedback -->
+ <div style="text-align:center;margin-top:18px" id="reg-recupera-link">
+ <p style="font-size:14.5px;color:var(--smoke);font-style:italic">
+ Hai già una prenotazione?
+ <a href="#" onclick="mostraRecupera(event)" style="color:var(--ember);font-weight:600;text-decoration:none;border-bottom:1px dashed var(--ember)">Recupera il link →</a>
+ </p>
+ <p style="font-size:13px;color:var(--ash);margin-top:10px"><a href="#" onclick="event.preventDefault();apriFeedback('registrazione')" style="color:var(--ember);border-bottom:1px dashed var(--ember)">Lascia un feedback</a></p>
+ </div>
+
+ <!-- hidden inputs per compatibilità con inviaReg() -->
+ <select id="r-evento" style="display:none"></select>
+ <select id="r-sessione" style="display:none"></select>
+ <div id="r-tav-section" style="display:none"></div>
+ </div>
+
+ <!-- recupera link (utenti già iscritti) -->
+ <div id="reg-recupera" class="hidden">
+ <div class="card">
+ <div class="card-head"><div class="card-head-icon">🔗</div><h2>Recupera il tuo link</h2></div>
+ <div class="card-body">
+ <p style="font-size:15px;color:var(--smoke);margin-bottom:12px;line-height:1.6">
+ Inserisci l'email che hai usato per prenotare: ti invieremo il <strong>link personale</strong> per accedere alla tua area.
+ </p>
+ <p style="font-size:13px;color:var(--ash);margin-bottom:18px;line-height:1.5">
+ Dal link potrai vedere le prenotazioni, modificarle, cancellarle o aggiungere altre aree allo stesso evento.
+ </p>
+ <div class="field first">
+ <label class="lbl">Email</label>
+ <input type="email" id="rec-email" placeholder="mario@email.it" onkeydown="if(event.key==='Enter')inviaRecupera()">
+ </div>
+ <div class="act-bar" style="margin-top:16px">
+ <button class="btn btn-p" onclick="inviaRecupera()">📧 Invia link</button>
+ <button class="btn btn-o" onclick="hide('reg-recupera');show('reg-panel')">← Torna al modulo</button>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- successo registrazione -->
+ <div id="reg-ok" class="hidden">
+ <div class="card">
+ <div class="suc-panel">
+ <span class="suc-icon">🎉</span>
+ <h2>Prenotazione confermata!</h2>
+ <p style="margin-top:10px">Ti abbiamo inviato un'<strong>email di conferma</strong> con il riepilogo<br>e un link personale per modificare la prenotazione.</p>
+ <p id="reg-ok-warning" class="hint hidden" style="margin-top:10px;color:var(--err);font-weight:600"></p>
+ <div class="suc-note">
+ <p style="font-size:13.5px;color:var(--smoke);font-style:italic">Non hai ricevuto l'email? Controlla la cartella spam oppure</p>
+ <button class="btn btn-o btn-sm" style="margin-top:10px" onclick="hide('reg-ok');show('reg-recupera')">🔗 Richiedi nuovamente il link</button>
+ </div>
+ <p style="margin-top:20px;font-size:13px;color:var(--ash)">Vuoi inviarci un <a href="#" onclick="event.preventDefault();apriFeedback('registrazione')" style="color:var(--ember);border-bottom:1px dashed var(--ember)">feedback</a>?</p>
+ </div>
+ </div>
+ </div>
+ </div><!-- /reg-main -->
+
+ <!-- ═══ GESTIONE UTENTE (UUID) ═══ -->
+ <div id="user-main" class="hidden">
+ <div id="user-fa"></div>
+
+ <!-- Intro per utente già iscritto -->
+ <p id="user-intro" class="user-intro hidden">Qui puoi modificare o cancellare le prenotazioni e aggiungere altre aree. <br><strong>Consiglio:</strong> salva questa pagina nei preferiti per tornare quando vuoi.</p>
+
+ <!-- Info persona -->
+ <div class="card">
+ <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+ <div style="display:flex;align-items:center;gap:8px">
+ <div class="card-head-icon">👤</div><h2 id="u-nome">–</h2>
+ </div>
+ <div id="u-edit-actions" style="display:flex;align-items:center;justify-content:flex-end;gap:10px">
+ <button type="button" class="btn btn-s btn-sm" onclick="apriPreferenzeEmail()">📩 Preferenze email</button>
+ <button type="button" class="btn btn-o btn-sm" onclick="apriModificaDatiUtente()">✏️ Modifica i miei dati</button>
+ </div>
+ </div>
+ <div class="card-body">
+ <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px">
+ <div>
+ <div class="lbl" style="margin-bottom:4px">Email</div>
+ <div id="u-email" style="font-weight:600;font-family:'Crimson Pro',serif;font-size:15px">–</div>
+ </div>
+ <div>
+ <div class="lbl" style="margin-bottom:4px">Cellulare</div>
+ <div id="u-cell" style="font-weight:600;font-family:'Crimson Pro',serif;font-size:15px">–</div>
+ </div>
+ </div>
+ <div id="u-edit-form" class="hidden" style="margin-top:14px;border-top:1px solid var(--vellum);padding-top:12px">
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Nome</label>
+ <input type="text" id="u-edit-nome" placeholder="Il tuo nome e cognome">
+ </div>
+ <div class="field first">
+ <label class="lbl">Cellulare</label>
+ <input type="tel" id="u-edit-cell" placeholder="Es. 333 1234567">
+ </div>
+ </div>
+ <p style="font-size:12px;color:var(--ash);margin-top:8px">
+ L'email non è modificabile da qui. Se deve essere cambiata contatta direttamente l'organizzatore.
+ </p>
+ <div class="act-bar" style="margin-top:10px">
+ <button type="button" class="btn btn-s btn-sm" onclick="salvaDatiUtente()">💾 Salva dati</button>
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiModificaDatiUtente()">Annulla</button>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <div id="u-email-prefs-card-wrap" class="card hidden" style="margin-top:16px;box-shadow:none;border:1.5px solid var(--vellum)">
+ <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+ <div style="display:flex;align-items:center;gap:8px">
+ <div class="card-head-icon">📩</div>
+ <h2 style="margin:0;font-size:18px">Preferenze email</h2>
+ </div>
+ <div>
+ <button type="button" class="btn btn-o btn-sm" onclick="apriPreferenzeEmail()" aria-label="Nascondi preferenze email">✕</button>
+ </div>
+ </div>
+ <div class="card-body">
+ <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+ <input type="checkbox" id="u-optout-new-event" style="width:18px;height:18px;margin-top:2px">
+ <span style="line-height:1.35">
+ <strong>Non voglio notifiche su nuovi eventi</strong>
+ <div style="font-size:12.5px;color:var(--ash);margin-top:4px">Continuerai a ricevere le email relative alle modifiche/cancellazioni delle tue prenotazioni.</div>
+ </span>
+ </label>
+ <div class="act-bar" style="margin-top:12px">
+ <button type="button" class="btn btn-s btn-sm" id="u-save-email-prefs" onclick="salvaPreferenzeEmail()">💾 Salva preferenze</button>
+ </div>
+ </div>
+ </div>
+
+ <div class="sec-title sec-title-user-pren" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+ <span id="u-sec-title">📅 Le tue prenotazioni</span>
+ <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+ <div class="u-main-tabs" role="tablist" aria-label="Sezione area utente">
+ <button type="button" class="u-main-tab active" id="u-tab-pren" role="tab" aria-selected="true" data-panel="u-pren-panel" onclick="switchUserTab('u-pren-panel', this)">📅 Prenotazioni attive</button>
+ <button type="button" class="u-main-tab" id="u-tab-storico" role="tab" aria-selected="false" data-panel="u-storico-panel" onclick="switchUserTab('u-storico-panel', this)">📜 Storico Partecipazioni</button>
+ <button type="button" class="u-main-tab" id="u-tab-friends" role="tab" aria-selected="false" data-panel="u-friends-panel" onclick="switchUserTab('u-friends-panel', this)">🤝 Amicizie</button>
+ </div>
+ <button type="button" class="btn btn-s btn-sm" id="u-btn-nuova-pren" onclick="avviaPrenotaDaUtente()" title="Crea una nuova prenotazione (evento, area e tavolo) con i tuoi dati già inseriti">➕ Nuova prenotazione</button>
+ <button class="btn btn-o btn-sm" onclick="caricaUtente()">↺ Aggiorna</button>
+ </div>
+ </div>
+
+ <!-- Pannello Prenotazioni (odierne e future) -->
+ <div id="u-pren-panel" class="u-panel" role="tabpanel">
+ <div id="u-ev-nav" style="display:flex;flex-wrap:nowrap;gap:8px;margin-bottom:18px;overflow-x:auto;overflow-y:visible;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:6px"></div>
+ <div id="u-ev-wrap" class="u-ev-wrap">
+ <div id="u-ev-acc-header-wrap" class="u-ev-acc-header-wrap hidden" aria-live="polite">
+ <div id="u-ev-selected" class="u-ev-selected u-ev-selected--accordion">
+ <button type="button" id="u-ev-selected-toggle" class="u-sess-tab u-sess-tab-event active u-ev-selected-tab" aria-selected="true">
+ <div id="u-ev-selected-inner" class="u-hier-event__head-text"></div>
+ </button>
+ </div>
+ </div>
+ <div id="u-ev-body-slot" class="u-ev-body-slot">
+ <div id="u-sess-nav" class="u-sess-tabs hidden"></div>
+ <div id="u-lista"></div>
+ <div id="u-aggiungi"></div>
+ </div>
+ </div>
+ </div>
+
+ <!-- Pannello Storico Partecipazioni -->
+ <div id="u-storico-panel" class="u-panel hidden" role="tabpanel" aria-labelledby="u-tab-storico">
+ <div id="u-storico-stats" class="u-storico-stats"></div>
+ <div class="sec-title" style="margin-top:24px;margin-bottom:12px">Timeline partecipazioni passate</div>
+ <div id="u-storico-timeline" class="hidden" style="margin-top:14px"></div>
+ <div id="u-storico-lista"></div>
+ </div>
+
+ <div id="u-friends-panel" class="u-panel hidden" role="tabpanel" aria-labelledby="u-tab-friends">
+ <div class="card" style="margin-top:6px">
+ <div class="card-body">
+ <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+ <h3 style="margin:0;font-size:16px">Rubrica amici</h3>
+ <button type="button" class="btn btn-o btn-sm" onclick="apriFormAmicizia()">+ Aggiungi amico</button>
+ </div>
+ <div id="u-friend-form" class="hidden" style="margin-top:10px;padding:10px;border:1px solid var(--vellum);border-radius:8px;background:var(--parch2)">
+ <input type="hidden" id="u-friend-id">
+ <div class="row2">
+ <div class="field first"><label class="lbl">Nome e cognome</label><input type="text" id="u-friend-nome" placeholder="Mario Rossi"></div>
+ <div class="field first"><label class="lbl">Email</label><input type="email" id="u-friend-email" placeholder="mario@email.it"></div>
+ </div>
+ <div class="row2" style="margin-top:8px">
+ <div class="field first"><label class="lbl">Cellulare</label><input type="tel" id="u-friend-cell" placeholder="+39..."></div>
+ <div class="field first"><label class="lbl">Note</label><input type="text" id="u-friend-note" placeholder="Compagno di campagna"></div>
+ </div>
+ <div class="act-bar" style="margin-top:8px">
+ <button type="button" class="btn btn-s btn-sm" onclick="salvaAmiciziaUtente()">💾 Salva</button>
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiFormAmicizia()">✕ Annulla</button>
+ </div>
+ </div>
+ <div id="u-friends-list" style="margin-top:12px"></div>
+ </div>
+ </div>
+ </div>
+
+ <p style="margin-top:24px;text-align:center;font-size:13px;color:var(--ash)"><a href="#" onclick="event.preventDefault();apriFeedback('area_utente')" style="color:var(--ember);border-bottom:1px dashed var(--ember)">Lascia un feedback</a></p>
+ </div>
+
+ <!-- ═══ AREA MASTER ═══ -->
+ <div id="master-main" class="hidden">
+ <div id="master-fa"></div>
+
+ <div class="card master-profile-card">
+ <div class="card-head">
+ <div class="card-head-icon">🧙</div>
+ <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;min-width:0">
+ <h2 id="m-nome" style="margin:0">Area Master</h2>
+ <div id="m-nick" style="font-size:13px;font-weight:600;color:rgba(255,255,255,.88);line-height:1.25;letter-spacing:.04em"></div>
+ </div>
+ </div>
+ <div class="card-body">
+ <div class="master-profile-grid">
+ <div>
+ <div class="lbl" style="margin-bottom:4px">Email</div>
+ <div id="m-email" style="font-weight:600;word-break:break-word">—</div>
+ </div>
+ <div>
+ <div class="lbl" style="margin-bottom:4px">Cellulare</div>
+ <div id="m-cell" style="font-weight:600">—</div>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <div id="m-panel-avventure" class="m-panel">
+ <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+ <div class="sec-title" style="margin:0">🎲 Le tue avventure</div>
+ <button type="button" class="btn btn-s btn-sm" onclick="apriMasterNuovaAvventuraPopup()">➕ Nuova avventura</button>
+ </div>
+ <div id="m-avventure-tabs" class="m-avventure-tabs" style="display:none;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center"></div>
+ <div id="m-avventure-cards"></div>
+ </div>
+
+ <div id="m-panel-tavoli" class="m-panel hidden">
+ <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+ <div class="sec-title" style="margin:0">📅 Prossime aree senza un tuo tavolo</div>
+ </div>
+ <div id="m-prossimi-tavoli-cards"></div>
+ </div>
+
+ <div id="m-panel-impegni" class="m-panel hidden">
+ <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+ <div class="sec-title" style="margin:0">🧳 Le avventure che porterai</div>
+ </div>
+ <div id="m-impegni-cards"></div>
+ </div>
+ </div>
+
+ <!-- AREA CO-ORGANIZZATORE — layout come Mappa eventi org -->
+ <div id="feedback-main" class="hidden">
+ <div id="feedback-root" class="feedback-wrap"></div>
+ </div>
+ <div id="sede-main" class="hidden">
+ <div id="sede-fa"></div>
+ <div class="card sede-profile-card">
+ <div class="card-head">
+ <div class="card-head-icon">🤝</div>
+ <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;min-width:0">
+ <h2 id="s-nome" style="margin:0">Area Co-organizzatore</h2>
+ <div id="s-referente" style="font-size:12px;font-weight:600;color:rgba(255,255,255,.88)"></div>
+ </div>
+ </div>
+ <div class="card-body">
+ <div class="sede-profile-meta" id="s-profile-meta">—</div>
+ </div>
+ </div>
+
+ <!-- STEP 1: griglia eventi -->
+ <div id="sede-lv1">
+ <div class="coorg-events-head">
+ <div class="sec-title">📅 I tuoi eventi</div>
+ <p class="org-tab-desc">Eventi in cui sei luogo ospitante oppure co-organizzatore. Apri un evento per gestire tavoli e iscrizioni.</p>
+ </div>
+ <div id="s-eventi-grid" class="mappa-ev-grid"></div>
+ </div>
+
+ <!-- STEP 2: dettaglio evento -->
+ <div id="sede-step2" class="hidden">
+ <div class="coorg-event-panel">
+ <div class="coorg-event-top">
+ <button type="button" class="btn btn-o btn-sm sede-det-back" onclick="sedeChiudiEvento()">← Eventi</button>
+ <div class="sede-det-bar">
+ <div class="sede-det-bar-left">
+ <div id="sede-det-title"></div>
+ <div id="sede-det-meta"></div>
+ </div>
+ </div>
+ </div>
+ <div class="coorg-sess-bar" id="sede-sess-bar">
+ <div class="coorg-sess-label">Sessione</div>
+ <div id="sede-sess-tabs" class="coorg-sess-tabs" role="tablist" aria-label="Sessioni evento"></div>
+ </div>
+ <div id="sede-sess-summary" class="sede-sess-summary" aria-live="polite"></div>
+ <div class="coorg-tavoli-wrap">
+ <div class="coorg-tavoli-label">Tavoli</div>
+ <div id="sede-tavoli-grid" class="mappa-tav-grid"></div>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <div id="sede-iscrivi-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiSedeIscriviPopup()">
+ <div class="dialog modifica-dialog" onclick="event.stopPropagation()">
+ <h3 class="modifica-dialog-title">➕ Aggiungi iscritto</h3>
+ <div class="modifica-content">
+ <input type="hidden" id="s-isc-event-id">
+ <input type="hidden" id="s-isc-sessione-id">
+ <input type="hidden" id="s-isc-tavolo-id">
+ <div id="s-isc-ctx" class="hint" style="margin-bottom:10px"></div>
+ <div class="field first">
+ <label class="lbl" for="s-isc-nome">Nome *</label>
+ <input type="text" id="s-isc-nome" autocomplete="name">
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl" for="s-isc-email">Email (opzionale)</label>
+ <input type="email" id="s-isc-email" autocomplete="email" placeholder="se ce l’hanno">
+ </div>
+ <div class="field first">
+ <label class="lbl" for="s-isc-cell">Cellulare</label>
+ <input type="text" id="s-isc-cell" autocomplete="tel">
+ </div>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl" for="s-isc-num">Persone</label>
+ <input type="number" id="s-isc-num" min="1" value="1">
+ </div>
+ <div class="field first">
+ <label class="lbl" for="s-isc-fascia">Fascia età</label>
+ <select id="s-isc-fascia"></select>
+ </div>
+ </div>
+ <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px">
+ <input type="checkbox" id="s-isc-email-send">
+ Invia email di conferma (solo se c’è email)
+ </label>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiSedeIscriviPopup()">Annulla</button>
+ <button type="button" class="btn btn-s btn-sm" onclick="confermaSedeIscrivi()">Salva iscrizione</button>
+ </footer>
+ </div>
+ </div>
+ <!-- OVERLAY CONFIRM -->
+ <div id="overlay" class="overlay hidden">
+ <div class="dialog">
+ <h3>⚠️ Conferma operazione</h3>
+ <p id="ov-msg"></p>
+ <label id="ov-notify-wrap" class="hidden" style="display:none;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin:12px 0 4px">
+ <input type="checkbox" id="ov-notify" style="width:auto" checked>
+ <span>Avvisa l'utente via email</span>
+ </label>
+ <div class="dlg-btns">
+ <button class="btn btn-o" id="ov-no">Annulla</button>
+ <button class="btn btn-d" id="ov-ok">Sì, procedi</button>
+ </div>
+ </div>
+ </div>
+
+ <!-- OVERLAY MODIFICA PRENOTAZIONE -->
+ <div id="modifica-overlay" class="overlay hidden" onclick="if(event.target===this)hide('modifica-overlay')">
+ <div class="dialog modifica-dialog" onclick="event.stopPropagation()">
+ <h3 id="modifica-dialog-title" class="modifica-dialog-title">✏️ Modifica</h3>
+ <div id="modifica-content" class="modifica-content"></div>
+ <footer id="modifica-dialog-footer" class="modifica-dialog-footer"></footer>
+ </div>
+ </div>
+
+ <!-- OVERLAY AZIONI SALVATAGGIO (senza nascondere la pagina) -->
+ <div id="action-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="action-overlay-msg">
+ <div class="dialog" style="max-width:360px;text-align:center">
+ <div class="dice-loader" aria-hidden="true">
+ <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+ <rect x="4" y="4" width="44" height="44" rx="10" stroke="#c05a1e" stroke-width="2.5" fill="none"/>
+ <circle cx="17" cy="17" r="4" fill="#c9922a"/>
+ <circle cx="35" cy="17" r="4" fill="#c9922a"/>
+ <circle cx="26" cy="26" r="4" fill="#c9922a"/>
+ <circle cx="17" cy="35" r="4" fill="#c9922a"/>
+ <circle cx="35" cy="35" r="4" fill="#c9922a"/>
+ </svg>
+ </div>
+ <p id="action-overlay-msg" style="margin:0;font-style:italic;color:var(--smoke)">Salvataggio in corso…</p>
+ </div>
+ </div>
+
+ <!-- OVERLAY NOTIFICA NUOVO EVENTO -->
+ <div id="notifica-overlay" class="overlay hidden" onclick="if(event.target===this)hide('notifica-overlay')">
+ <div class="dialog modifica-dialog" onclick="event.stopPropagation()">
+ <h3 id="notifica-dialog-title" class="modifica-dialog-title">📣 Invia notifica nuovo evento</h3>
+ <div id="notifica-content" class="modifica-content">
+ <p style="font-size:13.5px;color:var(--smoke);margin-bottom:10px">
+ Scegli a chi inviare l'email di annuncio per questo evento.
+ </p>
+ <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink2);margin-bottom:8px">
+ <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+ <input type="radio" name="notifica-mode" id="notifica-mode-utenti" value="utenti" style="width:auto" checked>
+ <span>
+ <strong>Invia a tutti gli utenti</strong>
+ <div style="font-size:12px;color:var(--ash)">Usa tutti gli indirizzi presenti nel foglio Utenti.</div>
+ </span>
+ </label>
+ <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+ <input type="radio" name="notifica-mode" id="notifica-mode-test" value="test" style="width:auto">
+ <span>
+ <strong>Invia solo ai test</strong>
+ <div style="font-size:12px;color:var(--ash)">Invia la notifica solo agli indirizzi di test configurati.</div>
+ </span>
+ </label>
+ </div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <button type="button" class="btn btn-o btn-sm" onclick="hide('notifica-overlay')">✕ Annulla</button>
+ <button type="button" class="btn btn-s btn-sm" onclick="confermaInviaNotificaNuovoEvento()">📣 Invia notifica</button>
+ </footer>
+ </div>
+ </div>
+
+ <!-- OVERLAY DETTAGLI UTENTE (organizzatore) -->
+ <div id="utente-detail-overlay" class="overlay hidden" onclick="if(event.target===this)closeUtenteDetailOverlay()">
+ <div class="dialog user-detail-dialog" onclick="event.stopPropagation()">
+ <div class="card-head user-detail-head">
+ <div class="card-head-icon">👤</div>
+ <h2>Dettagli utente</h2>
+ <button type="button" class="btn btn-o btn-sm user-detail-close" onclick="closeUtenteDetailOverlay()" aria-label="Chiudi">✕</button>
+ </div>
+ <div id="utente-detail-content" class="user-detail-content"></div>
+ </div>
+ </div>
+
+ <!-- POPUP giochi disponibili (GDT / gioco libero) -->
+ <div id="reg-gdt-giochi-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiRegGdtGiochiPopup()" role="dialog" aria-modal="true" aria-labelledby="reg-gdt-giochi-title">
+ <div class="dialog" style="max-width:420px" onclick="event.stopPropagation()">
+ <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
+ <h3 id="reg-gdt-giochi-title" style="margin:0">🎲 Giochi presenti</h3>
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiRegGdtGiochiPopup()" aria-label="Chiudi">✕</button>
+ </div>
+ <p id="reg-gdt-giochi-sess" class="hint" style="margin-top:0;margin-bottom:12px"></p>
+ <ul id="reg-gdt-giochi-list" style="margin:0;padding-left:1.2em;font-size:15px;color:var(--ink);line-height:1.55"></ul>
+ <div class="dlg-btns" style="margin-top:20px">
+ <button type="button" class="btn btn-s btn-full" onclick="chiudiRegGdtGiochiPopup()">Chiudi</button>
+ </div>
+ </div>
+ </div>
+
+ <!-- OVERLAY DOMANDE FEEDBACK (organizzatore) -->
+<div id="modfb-overlay" class="overlay hidden">
+ <div class="dialog" style="max-width:680px">
+ <h3>📝 Domande del feedback</h3>
+ <div id="modfb-body"></div>
+ <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+ <button class="btn btn-o" type="button" onclick="hide('modfb-overlay')">Chiudi</button>
+ <button class="btn btn-s" type="button" id="modfb-save" onclick="modfbSalva()">Salva modulo</button>
+ </div>
+ </div>
+</div>
+<!-- OVERLAY FEEDBACK -->
+ <div id="feedback-overlay" class="overlay hidden">
+ <div class="dialog" style="max-width:480px">
+ <h3>💬 Lascia un feedback</h3>
+ <p style="font-size:14px;color:var(--smoke);margin-bottom:16px">Suggerimenti, problemi o commenti: li leggeremo e ci aiuteranno a migliorare il servizio.</p>
+ <div class="field first">
+ <label class="lbl">Riguarda</label>
+ <select id="fb-source">
+ <option value="registrazione">Registrazione / prenotazione</option>
+ <option value="area_utente">Le mie prenotazioni</option>
+ <option value="dashboard_organizzatore">Dashboard organizzatore</option>
+ <option value="altro">Altro</option>
+ </select>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Nome <span class="lbl-note">facoltativo</span></label>
+ <input type="text" id="fb-nome" placeholder="Mario R.">
+ </div>
+ <div class="field first">
+ <label class="lbl">Email <span class="lbl-note">facoltativo</span></label>
+ <input type="email" id="fb-email" placeholder="mario@email.it">
+ </div>
+ </div>
+ <div class="field">
+ <label class="lbl">Messaggio *</label>
+ <textarea id="fb-messaggio" placeholder="Scrivi qui il tuo feedback…" rows="4"></textarea>
+ </div>
+ <div id="fb-flash" class="hidden" style="margin-bottom:12px"></div>
+ <div class="dlg-btns">
+ <button class="btn btn-o" onclick="hide('feedback-overlay')">Annulla</button>
+ <button class="btn btn-s" id="fb-invia" onclick="inviaFeedbackFront()">Invia feedback</button>
+ </div>
+ </div>
+ </div>
+
+ <!-- POPUP notifiche successo / errore / info (sostituisce i banner flash) -->
+ <div id="notify-popup" class="overlay hidden notify-popup-overlay" onclick="if(event.target===this)hideNotifyPopup()" role="dialog" aria-modal="true" aria-labelledby="notify-popup-msg">
+ <div class="dialog notify-popup-card" id="notify-popup-card" onclick="event.stopPropagation()">
+ <div class="notify-popup-icon-wrap" id="notify-popup-icon" aria-hidden="true">✅</div>
+ <p class="notify-popup-text" id="notify-popup-msg"></p>
+ <button type="button" class="btn btn-p btn-full" id="notify-popup-ok">OK</button>
+ </div>
+ </div>
+
+ <div id="mail-detail-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiMailDetailPopup()" role="dialog" aria-modal="true" aria-labelledby="mail-detail-title">
+ <div class="dialog mail-detail-dialog" onclick="event.stopPropagation()">
+ <h3 id="mail-detail-title">📧 Dettaglio invio</h3>
+ <div id="mail-detail-content"></div>
+ <div class="dlg-btns">
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiMailDetailPopup()">Chiudi</button>
+ </div>
+ </div>
+ </div>
+
+ <div id="avviso-evento-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiAvvisoEventoPopup()" role="dialog" aria-modal="true" aria-labelledby="avviso-evento-title">
+ <div class="dialog avviso-evento-dialog" onclick="event.stopPropagation()">
+ <h3 id="avviso-evento-title">📬 Stato avviso evento</h3>
+ <div id="avviso-evento-subtitle" style="font-size:13px;color:var(--smoke)"></div>
+ <div class="avviso-evento-tabs">
+ <button type="button" class="tab-btn avviso-evento-tab" data-avv-tab="ricevuto" onclick="switchAvvisoEventoTab('ricevuto', this)">✅ Ricevuto</button>
+ <button type="button" class="tab-btn avviso-evento-tab" data-avv-tab="attesa" onclick="switchAvvisoEventoTab('attesa', this)">⏳ In attesa</button>
+ <button type="button" class="tab-btn avviso-evento-tab active" data-avv-tab="mancanti" onclick="switchAvvisoEventoTab('mancanti', this)">📭 Mancanti</button>
+ </div>
+ <div id="avviso-evento-list" class="avviso-evento-list"></div>
+ <div class="dlg-btns">
+ <button type="button" class="btn btn-p btn-sm" onclick="apriInvioNotificaDaPopupAvviso()">📣 Invia notifica</button>
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiAvvisoEventoPopup()">Chiudi</button>
+ </div>
+ </div>
+ </div>
+
+ <!-- OVERLAY UNIFICA NOME (area utente: più varianti di nome nelle prenotazioni) -->
+ <div id="nome-unifica-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="nome-unifica-title">
+ <div class="dialog" style="max-width:440px" onclick="event.stopPropagation()">
+ <h3 id="nome-unifica-title">👤 Scegli il tuo nome ufficiale</h3>
+ <p style="font-size:14px;color:var(--smoke);line-height:1.55;margin:0 0 14px">
+ Abbiamo trovato <strong>più versioni del nome</strong> associato al tuo account (probabilmente da prenotazioni inserite in modo diverso).
+ Scegli quella che vuoi usare: <strong>aggiorneremo il foglio Utenti</strong> e <strong>tutte le righe delle tue prenotazioni</strong> (file Risposte) con questo nome.
+ </p>
+ <div id="nome-unifica-list" class="nome-unifica-list" style="margin-bottom:16px"></div>
+ <p id="nome-unifica-flash" class="hidden" style="font-size:13px;margin-bottom:12px"></p>
+ <div class="dlg-btns">
+ <button type="button" class="btn btn-s" id="nome-unifica-btn" onclick="confermaUnificaNomeUtente()">Conferma e aggiorna</button>
+ </div>
+ </div>
+ </div>
+
+ <!-- OVERLAY ISCRIZIONE MANUALE TAVOLO (organizzatore) -->
+ <div id="org-manual-overlay" class="overlay hidden" onclick="if(event.target===this)hide('org-manual-overlay')">
+ <div class="dialog modifica-dialog" style="max-width:440px" onclick="event.stopPropagation()">
+ <h3 id="org-manual-title" class="modifica-dialog-title">Aggiungi iscritto</h3>
+ <div class="modifica-content" style="padding-top:4px">
+ <p style="font-size:13px;color:var(--smoke);margin:0 0 12px">Registra una prenotazione come se fosse compilata dal sito: viene creato un UUID collegato all’email (o riusato se l’email esiste già).</p>
+ <input type="hidden" id="org-manual-ev">
+ <input type="hidden" id="org-manual-sess">
+ <input type="hidden" id="org-manual-tav-id">
+ <div class="field first" style="margin-bottom:10px">
+ <label class="lbl">Utente già presente <span class="lbl-note">opzionale</span></label>
+ <input type="text" id="org-manual-user-search" list="org-manual-user-list" placeholder="Cerca nome o email">
+ <datalist id="org-manual-user-list"></datalist>
+ <div class="hint">Seleziona un utente esistente per precompilare i campi.</div>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Nome e cognome *</label>
+ <input type="text" id="org-manual-nome" autocomplete="name" placeholder="Mario Rossi">
+ </div>
+ <div class="field first">
+ <label class="lbl">Email *</label>
+ <input type="email" id="org-manual-email" autocomplete="email" placeholder="mario@email.it">
+ </div>
+ </div>
+ <div class="field first" style="margin-top:10px">
+ <label class="lbl">Cellulare <span class="lbl-note">facoltativo</span></label>
+ <input type="tel" id="org-manual-cell" autocomplete="tel" placeholder="+39 …">
+ </div>
+ <div class="row2" style="margin-top:10px">
+ <div class="field first">
+ <label class="lbl">Persone</label>
+ <input type="number" id="org-manual-num" min="1" max="99" value="1" style="max-width:120px">
+ </div>
+ <div class="field first" id="org-manual-fascia-wrap">
+ <label class="lbl">Fascia d’età</label>
+ <select id="org-manual-fascia-select" class="hidden" style="width:100%"></select>
+ <input type="text" id="org-manual-fascia-text" class="hidden" placeholder="es. 18–25 anni" style="width:100%">
+ </div>
+ </div>
+ <div class="field first" style="margin-top:10px">
+ <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+ <input type="checkbox" id="org-manual-invia-email" style="width:auto">
+ Invia email di conferma all’indirizzo indicato
+ </label>
+ </div>
+ <div id="org-manual-pwd-row" class="field first hidden" style="margin-top:10px">
+ <label class="lbl">Password organizzatore</label>
+ <input type="password" id="org-manual-pwd" autocomplete="off" placeholder="Solo se non hai fatto login in questa sessione">
+ </div>
+ <div id="org-manual-err" style="margin-top:10px;font-size:13px;color:var(--err)"></div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <button type="button" class="btn btn-o btn-sm" onclick="hide('org-manual-overlay')">Annulla</button>
+ <button type="button" class="btn btn-s btn-sm" id="org-manual-submit" onclick="orgInviaIscrizioneManuale()">Aggiungi iscritto</button>
+ </footer>
+ </div>
+ </div>
+
+ <!-- OVERLAY SPOSTA PRENOTAZIONE (organizzatore) -->
+ <div id="org-move-overlay" class="overlay hidden" onclick="if(event.target===this)hide('org-move-overlay')">
+ <div class="dialog modifica-dialog" style="max-width:500px" onclick="event.stopPropagation()">
+ <h3 id="org-move-title" class="modifica-dialog-title">Sposta prenotazione</h3>
+ <div class="modifica-content" style="padding-top:4px">
+ <p style="font-size:13px;color:var(--smoke);margin:0 0 12px">Sposta questa prenotazione su un altro tavolo della stessa sessione.</p>
+ <div id="org-move-summary"></div>
+ <input type="hidden" id="org-move-ev">
+ <input type="hidden" id="org-move-sess">
+ <input type="hidden" id="org-move-uuid">
+ <input type="hidden" id="org-move-old">
+ <input type="hidden" id="org-move-num">
+ <input type="hidden" id="org-move-fascia">
+ <div class="field first">
+ <label class="lbl">Nuovo tavolo</label>
+ <select id="org-move-target" style="width:100%" onchange="orgMoveOnTargetChange()"></select>
+ </div>
+ <div class="field first" style="margin-top:10px">
+ <label class="lbl">Messaggio per il prenotante</label>
+ <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+ <button type="button" class="btn btn-o btn-sm" onclick="orgMoveApplicaTemplateMaster()">Master assente / avventura cambiata</button>
+ </div>
+ <textarea id="org-move-motivo" rows="5" maxlength="500" placeholder="Es. per problemi organizzativi il master non potra essere presente; abbiamo spostato la prenotazione su un'altra avventura…" style="width:100%;resize:vertical;min-height:96px"></textarea>
+ <div style="font-size:11px;color:var(--ash);margin-top:4px">Se invii l'email, questo testo viene mostrato al prenotante (puoi modificarlo prima di confermare).</div>
+ </div>
+ <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-top:10px">
+ <input type="checkbox" id="org-move-notify" style="width:auto">
+ Avvisa l'utente via email dello spostamento
+ </label>
+ <div id="org-move-err" style="margin-top:10px;font-size:13px;color:var(--err)"></div>
+ </div>
+ <footer class="modifica-dialog-footer" style="flex-wrap:wrap;gap:8px">
+ <button type="button" class="btn btn-d btn-sm" id="org-move-cancel-part" onclick="orgCancellaDaOverlaySposta()" title="Cancella la prenotazione di questo partecipante">Cancella partecipazione</button>
+ <span style="flex:1 1 auto"></span>
+ <button type="button" class="btn btn-o btn-sm" onclick="hide('org-move-overlay')">Annulla</button>
+ <button type="button" class="btn btn-s btn-sm" id="org-move-submit" onclick="orgConfermaSpostaPrenotazione()">Sposta</button>
+ </footer>
+ </div>
+ </div>
+
+ <!-- OVERLAY MODIFICA TAVOLO (organizzatore) -->
+ <div id="org-tav-edit-overlay" class="overlay hidden" onclick="if(event.target===this)hide('org-tav-edit-overlay')">
+ <div class="dialog modifica-dialog" style="max-width:520px" onclick="event.stopPropagation()">
+ <h3 id="org-tav-edit-title" class="modifica-dialog-title">Modifica tavolo</h3>
+ <div class="modifica-content" style="padding-top:4px">
+ <input type="hidden" id="org-tav-edit-ev">
+ <input type="hidden" id="org-tav-edit-sess">
+ <input type="hidden" id="org-tav-edit-id">
+ <div class="org-tav-edit-block">
+ <div class="org-tav-edit-block-title">Dati tavolo</div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">ID tavolo</label>
+ <input type="text" id="org-tav-edit-id-view" readonly>
+ </div>
+ <div class="field first">
+ <label class="lbl">Sessione</label>
+ <select id="org-tav-edit-sess-target" style="width:100%"></select>
+ </div>
+ </div>
+ <div class="row2" style="margin-top:10px">
+ <div class="field first">
+ <label class="lbl">Tipo</label>
+ <select id="org-tav-edit-tipo">
+ <option value="GDR">GDR</option>
+ <option value="GDT">GDT</option>
+ <option value="PANEL">PANEL</option>
+ <option value="GIOCO_LIBERO">GIOCO_LIBERO</option>
+ </select>
+ </div>
+ <div class="field first">
+ <label class="lbl">Max posti</label>
+ <input type="number" id="org-tav-edit-max" min="1" max="99" value="5">
+ </div>
+ </div>
+ <div class="field first" style="margin-top:10px">
+ <label class="lbl">Fascia età minima</label>
+ <select id="org-tav-edit-fascia-min">
+ <option value="">Nessuna</option>
+ </select>
+ </div>
+ <div class="field first" style="margin-top:10px">
+ <label class="lbl">Note tavolo</label>
+ <textarea id="org-tav-edit-desc-tavolo" rows="2" placeholder="Note del tavolo (sala, setup, logistica), indipendenti dall'avventura"></textarea>
+ </div>
+ <div class="field first" style="margin-top:10px;display:flex;gap:14px;flex-wrap:wrap">
+ <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+ <input type="checkbox" id="org-tav-edit-show-master" style="width:auto">
+ Mostra master nelle prenotazioni
+ </label>
+ <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+ <input type="checkbox" id="org-tav-edit-attivo" style="width:auto">
+ Visibile nelle prenotazioni
+ </label>
+ </div>
+ </div>
+ <div class="org-tav-edit-avv-box">
+ <div class="org-tav-edit-avv-title">Dettagli avventura</div>
+ <p class="org-tav-edit-avv-sub">Seleziona un master e poi una sua avventura per compilare i campi in automatico.</p>
+ <div class="row2" style="margin-top:8px">
+ <div class="field first">
+ <label class="lbl">Master</label>
+ <select id="org-tav-edit-master-select" style="width:100%">
+ <option value="">Seleziona master</option>
+ </select>
+ </div>
+ <div class="field first">
+ <label class="lbl">Avventura del master</label>
+ <select id="org-tav-edit-avventura-select" style="width:100%">
+ <option value="">Seleziona avventura</option>
+ </select>
+ <p class="hint" style="margin:6px 0 0;font-size:12px">L'elenco mostra le avventure attive del master selezionato.</p>
+ </div>
+ </div>
+ <div class="row2" style="margin-top:10px">
+ <div class="field first">
+ <label class="lbl">Sistema di gioco</label>
+ <div class="tav-sistema-wrap">
+ <select id="org-tav-edit-sistema" style="width:100%">
+ <option value="">Seleziona sistema</option>
+ </select>
+ <button type="button" class="btn-add-sistema" title="Aggiungi sistema" onclick="aggiungiNuovoSistemaGioco(this, 'org-tav-edit-sistema')">+</button>
+ </div>
+ </div>
+ <div class="field first">
+ <label class="lbl">Titolo avventura</label>
+ <input type="text" id="org-tav-edit-titolo" placeholder="Titolo tavolo">
+ </div>
+ </div>
+ <details class="org-tav-edit-advanced" id="org-tav-edit-avv-extra">
+ <summary>Dettagli avventura avanzati</summary>
+ <div class="org-tav-edit-advanced-body">
+ <div class="field first" style="margin-top:6px">
+ <label class="lbl">Sinossi</label>
+ <textarea id="org-tav-edit-desc" rows="3" placeholder="Sinossi dell'avventura"></textarea>
+ </div>
+ <div class="row2" style="margin-top:10px">
+ <div class="field first">
+ <label class="lbl">Livello</label>
+ <input type="text" id="org-tav-edit-livello" placeholder="Es. Base, Intermedio, 12+">
+ </div>
+ <div class="field first">
+ <label class="lbl">Tono</label>
+ <input type="text" id="org-tav-edit-tono" placeholder="Es. Epico, investigativo, leggero">
+ </div>
+ </div>
+ <div class="row2" style="margin-top:10px">
+ <div class="field first">
+ <label class="lbl">Genere</label>
+ <input type="text" id="org-tav-edit-tema" placeholder="Salvato sull'avventura collegata">
+ </div>
+ <div class="field first">
+ <label class="lbl">Ambientazione</label>
+ <input type="text" id="org-tav-edit-ambientazione" placeholder="Salvato sull'avventura collegata">
+ </div>
+ </div>
+ <div class="field first" style="margin-top:10px">
+ <label class="lbl">Tematiche sensibili</label>
+ <input type="text" id="org-tav-edit-tematiche" placeholder="Es. violenza, horror, lutto">
+ </div>
+ </div>
+ </details>
+ </div>
+ <div id="org-tav-edit-err" style="margin-top:10px;font-size:13px;color:var(--err)"></div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <button type="button" class="btn btn-o btn-sm" onclick="hide('org-tav-edit-overlay')">Annulla</button>
+ <button type="button" class="btn btn-s btn-sm" id="org-tav-edit-submit" onclick="orgConfermaModificaTavolo()">Salva tavolo</button>
+ </footer>
+ </div>
+ </div>
+
+ <!-- OVERLAY DETTAGLIO PRENOTAZIONE (mappa eventi – tabella sessione) -->
+ <div id="org-mappa-pren-detail-overlay" class="overlay hidden" onclick="if(event.target===this)hide('org-mappa-pren-detail-overlay')">
+ <div class="dialog modifica-dialog" style="max-width:480px" onclick="event.stopPropagation()">
+ <h3 class="modifica-dialog-title">Dettaglio prenotazione</h3>
+ <div class="modifica-content" style="padding-top:4px">
+ <p id="org-mappa-pren-detail-sub" style="font-size:13px;color:var(--smoke);margin:0 0 12px;line-height:1.45"></p>
+ <div id="org-mappa-pren-detail-body"></div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <button type="button" class="btn btn-s btn-sm" onclick="hide('org-mappa-pren-detail-overlay')">Chiudi</button>
+ </footer>
+ </div>
+ </div>
+
+ <!-- OVERLAY LINK AREA MASTER (anagrafica Masters) -->
+ <div id="org-master-link-overlay" class="overlay hidden" onclick="if(event.target===this)hide('org-master-link-overlay')">
+ <div class="dialog modifica-dialog" style="max-width:520px" onclick="event.stopPropagation()">
+ <h3 class="modifica-dialog-title">🔗 Link area master</h3>
+ <div class="modifica-content" style="padding-top:4px">
+ <p id="org-master-link-sub" style="font-size:13px;color:var(--smoke);margin:0 0 10px;line-height:1.45">
+ Condividi questo indirizzo con il master per accedere all’area personale.
+ </p>
+ <input type="text" id="org-master-link-url" readonly style="width:100%;box-sizing:border-box;font-family:'DM Mono',monospace;font-size:12px;margin-bottom:12px">
+ <div class="dlg-btns" style="flex-wrap:wrap;gap:8px;justify-content:flex-start;margin:0">
+ <button type="button" class="btn btn-o btn-sm" onclick="orgCopiaLinkMaster()">📋 Copia</button>
+ <button type="button" class="btn btn-s btn-sm" onclick="orgApriLinkMasterNuovaScheda()">Apri in nuova scheda</button>
+ </div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <button type="button" class="btn btn-s btn-sm" onclick="hide('org-master-link-overlay')">Chiudi</button>
+ </footer>
+ </div>
+ </div>
+
+ <!-- POPUP NUOVA AVVENTURA (area master) -->
+ <div id="master-nuova-avventura-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiMasterNuovaAvventuraPopup()">
+ <div class="dialog modifica-dialog" style="max-width:640px" onclick="event.stopPropagation()">
+ <h3 class="modifica-dialog-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+ <span>➕ Nuova avventura</span>
+ <button type="button" class="btn btn-o btn-sm user-detail-close" onclick="chiudiMasterNuovaAvventuraPopup()" aria-label="Chiudi">✕</button>
+ </h3>
+ <div class="modifica-content" style="padding-top:12px">
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Titolo avventura</label>
+ <input type="text" id="m-new-titolo" placeholder="La cripta del drago">
+ </div>
+ <div class="field first">
+ <label class="lbl">Sistema di gioco</label>
+ <select id="m-new-sistema" onchange="masterOnSistemaGiocoChange()">
+ <option value="">— Seleziona sistema —</option>
+ </select>
+ <input type="text" id="m-new-sistema-custom" class="hidden" placeholder="Inserisci nuovo sistema di gioco" style="margin-top:8px">
+ </div>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Livello</label>
+ <input type="text" id="m-new-livello" placeholder="Es. 1-3, Principiante, Tier 2">
+ </div>
+ <div class="field first">
+ <label class="lbl">Tipo</label>
+ <select id="m-new-tipo">
+ <option value="GDR">GDR</option>
+ <option value="GDT">GDT</option>
+ <option value="PANEL">PANEL</option>
+ <option value="GIOCO_LIBERO">GIOCO_LIBERO</option>
+ </select>
+ </div>
+ </div>
+ <div class="field first">
+ <label class="lbl">Player max avventura</label>
+ <input type="number" id="m-new-max" min="1" max="20" value="6">
+ </div>
+ <div class="field">
+ <label class="lbl">Fascia età minima</label>
+ <select id="m-new-fascia-min">
+ <option value="">Nessuna</option>
+ </select>
+ </div>
+ <div class="field">
+ <label class="lbl">Descrizione</label>
+ <textarea id="m-new-descr" rows="3" placeholder="Breve descrizione dell'avventura"></textarea>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Tema</label>
+ <input type="text" id="m-new-tema" placeholder="Es. horror, investigativo, commedia">
+ </div>
+ <div class="field first">
+ <label class="lbl">Ambientazione</label>
+ <input type="text" id="m-new-ambientazione" placeholder="Es. fantasy urbano, spazio, Italia anni ’30">
+ </div>
+ </div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <div class="act-bar">
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiMasterNuovaAvventuraPopup()">Annulla</button>
+ <button type="button" class="btn btn-s" id="m-new-submit" onclick="salvaNuovaAvventuraDaMaster()">💾 Crea avventura</button>
+ </div>
+ </footer>
+ </div>
+ </div>
+
+ <div id="master-modifica-info-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiMasterModificaInfoPopup()">
+ <div class="dialog modifica-dialog" style="max-width:540px" onclick="event.stopPropagation()">
+ <h3 class="modifica-dialog-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+ <span>👤 Modifica informazioni master</span>
+ <button type="button" class="btn btn-o btn-sm user-detail-close" onclick="chiudiMasterModificaInfoPopup()" aria-label="Chiudi">✕</button>
+ </h3>
+ <div class="modifica-content" style="padding-top:12px">
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Nome</label>
+ <input type="text" id="m-info-nome" placeholder="Nome e cognome">
+ </div>
+ <div class="field first">
+ <label class="lbl">Nick</label>
+ <input type="text" id="m-info-nick" placeholder="Nyx">
+ </div>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Email</label>
+ <input type="email" id="m-info-email" placeholder="nome@email.it">
+ </div>
+ <div class="field first">
+ <label class="lbl">Cellulare</label>
+ <input type="text" id="m-info-cell" placeholder="+39 ...">
+ </div>
+ </div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <div class="act-bar">
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiMasterModificaInfoPopup()">Annulla</button>
+ <button type="button" class="btn btn-s btn-sm" id="m-info-submit" onclick="salvaMasterInfoDaPopup()">💾 Salva</button>
+ </div>
+ </footer>
+ </div>
+ </div>
+
+ <div id="master-gestione-avventura-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiMasterGestioneAvventuraPopup()">
+ <div class="dialog modifica-dialog" style="max-width:680px" onclick="event.stopPropagation()">
+ <h3 class="modifica-dialog-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+ <span>🧩 Gestisci avventura</span>
+ <button type="button" class="btn btn-o btn-sm user-detail-close" onclick="chiudiMasterGestioneAvventuraPopup()" aria-label="Chiudi">✕</button>
+ </h3>
+ <div class="modifica-content" style="padding-top:12px">
+ <input type="hidden" id="m-edit-avventura-id">
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Titolo avventura</label>
+ <input type="text" id="m-edit-titolo" placeholder="La cripta del drago">
+ </div>
+ <div class="field first">
+ <label class="lbl">Sistema di gioco</label>
+ <input type="text" id="m-edit-sistema" placeholder="D&D 5e">
+ </div>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Livello</label>
+ <input type="text" id="m-edit-livello" placeholder="Es. 1-3, Principiante, Tier 2">
+ </div>
+ <div class="field first">
+ <label class="lbl">Tipo</label>
+ <select id="m-edit-tipo">
+ <option value="GDR">GDR</option>
+ <option value="GDT">GDT</option>
+ <option value="PANEL">PANEL</option>
+ <option value="GIOCO_LIBERO">GIOCO_LIBERO</option>
+ </select>
+ </div>
+ </div>
+ <div class="field first">
+ <label class="lbl">Player max avventura</label>
+ <input type="number" id="m-edit-max" min="1" max="20" value="6">
+ </div>
+ <div class="field">
+ <label class="lbl">Fascia età minima</label>
+ <select id="m-edit-fascia-min">
+ <option value="">Nessuna</option>
+ </select>
+ </div>
+ <div class="field">
+ <label class="lbl">Descrizione</label>
+ <textarea id="m-edit-descr" rows="3" placeholder="Breve descrizione dell'avventura"></textarea>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Tema</label>
+ <input type="text" id="m-edit-tema" placeholder="Es. horror, investigativo">
+ </div>
+ <div class="field first">
+ <label class="lbl">Ambientazione</label>
+ <input type="text" id="m-edit-ambientazione" placeholder="Es. fantasy, storico">
+ </div>
+ </div>
+ <div class="row2">
+ <div class="field first">
+ <label class="lbl">Tono</label>
+ <input type="text" id="m-edit-tono" placeholder="Es. epico, investigativo, leggero">
+ </div>
+ <div class="field first">
+ <label class="lbl">Tematiche sensibili</label>
+ <input type="text" id="m-edit-tematiche" placeholder="Es. violenza, horror, lutto">
+ </div>
+ </div>
+ <div class="field">
+ <label class="lbl">Tavoli collegati</label>
+ <div id="m-edit-tavoli-linked" class="hint" style="line-height:1.55"></div>
+ </div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <div class="act-bar" style="justify-content:space-between;width:100%">
+ <button type="button" class="btn btn-d btn-sm" onclick="masterEliminaAvventuraDaPopup()">🗑️ Elimina</button>
+ <div style="display:flex;gap:8px;flex-wrap:wrap">
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiMasterGestioneAvventuraPopup()">Annulla</button>
+ <button type="button" class="btn btn-s btn-sm" id="m-edit-submit" onclick="masterSalvaModificaAvventuraDaPopup()">💾 Salva modifiche</button>
+ </div>
+ </div>
+ </footer>
+ </div>
+ </div>
+
+ <div id="master-prendi-tavolo-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiMasterPrendiTavoloPopup()">
+ <div class="dialog modifica-dialog" style="max-width:560px" onclick="event.stopPropagation()">
+ <h3 class="modifica-dialog-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+ <span>🎯 Fai il Master</span>
+ <button type="button" class="btn btn-o btn-sm user-detail-close" onclick="chiudiMasterPrendiTavoloPopup()" aria-label="Chiudi">✕</button>
+ </h3>
+ <div class="modifica-content" style="padding-top:12px">
+ <input type="hidden" id="m-prendi-event-id">
+ <input type="hidden" id="m-prendi-sessione-id">
+ <input type="hidden" id="m-prendi-avventura-id">
+ <div id="m-prendi-tavolo-meta" class="hint" style="margin-bottom:10px;line-height:1.55"></div>
+ <div class="field first">
+ <label class="lbl">Filtra per sistema di gioco</label>
+ <div id="m-prendi-sistemi-tabs" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+ </div>
+ <div class="field" style="margin-top:10px">
+ <label class="lbl">Seleziona una tua avventura</label>
+ <div id="m-prendi-avventure-list" style="display:grid;gap:8px"></div>
+ </div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <div class="act-bar">
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiMasterPrendiTavoloPopup()">Annulla</button>
+ <button type="button" class="btn btn-s btn-sm" id="m-prendi-submit" onclick="confermaMasterPrendiTavolo()">🎯 Fai il Master</button>
+ </div>
+ </footer>
+ </div>
+ </div>
+
+ <div id="master-impegno-dettaglio-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiMasterImpegnoDettaglioPopup()">
+ <div class="dialog modifica-dialog" style="max-width:620px" onclick="event.stopPropagation()">
+ <h3 class="modifica-dialog-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+ <span>📋 Dettaglio avventura</span>
+ <button type="button" class="btn btn-o btn-sm user-detail-close" onclick="chiudiMasterImpegnoDettaglioPopup()" aria-label="Chiudi">✕</button>
+ </h3>
+ <div class="modifica-content" style="padding-top:12px">
+ <div id="m-impegno-dettaglio-content" style="font-size:13.5px;line-height:1.6;color:var(--ink2)"></div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <div class="act-bar">
+ <button type="button" class="btn btn-s btn-sm" onclick="chiudiMasterImpegnoDettaglioPopup()">Chiudi</button>
+ </div>
+ </footer>
+ </div>
+ </div>
+
+ <div id="master-avventura-storico-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiMasterStoricoAvventuraPopup()">
+ <div class="dialog modifica-dialog" style="max-width:700px" onclick="event.stopPropagation()">
+ <h3 class="modifica-dialog-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+ <span id="m-storico-title">🗂️ Storico avventura</span>
+ <button type="button" class="btn btn-o btn-sm user-detail-close" onclick="chiudiMasterStoricoAvventuraPopup()" aria-label="Chiudi">✕</button>
+ </h3>
+ <div class="modifica-content" style="padding-top:12px">
+ <div class="field first" style="margin-bottom:10px;max-width:220px">
+ <label class="lbl">Ordine</label>
+ <select id="m-storico-order" onchange="renderMasterStoricoAvventuraContent()">
+ <option value="desc">Decrescente</option>
+ <option value="asc">Crescente</option>
+ </select>
+ </div>
+ <div id="m-storico-content" style="font-size:13.5px;line-height:1.6;color:var(--ink2)"></div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <div class="act-bar">
+ <button type="button" class="btn btn-s btn-sm" onclick="chiudiMasterStoricoAvventuraPopup()">Chiudi</button>
+ </div>
+ </footer>
+ </div>
+ </div>
+
+ <!-- OVERLAY SELEZIONE GIOCHI PER AVVISO NUOVI GIOCHI GDT -->
+ <div id="org-avviso-giochi-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiAvvisoNuoviGiochi()">
+ <div class="dialog modifica-dialog" style="max-width:560px" onclick="event.stopPropagation()">
+ <h3 class="modifica-dialog-title">Avviso nuovi giochi</h3>
+ <div class="modifica-content" style="padding-top:4px">
+ <p style="font-size:13px;color:var(--smoke);margin:0 0 10px">
+ Seleziona i giochi da includere nell'email. La ricevono solo le persone già iscritte a quella sessione, con un indirizzo valido.
+ </p>
+ <div id="org-avviso-giochi-summary" class="hint" style="margin-bottom:8px"></div>
+ <div id="org-avviso-giochi-list" style="display:grid;gap:8px;max-height:260px;overflow:auto;padding-right:4px"></div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiAvvisoNuoviGiochi()">Annulla</button>
+ <button type="button" class="btn btn-s btn-sm" onclick="confermaSelezioneAvvisoNuoviGiochi()">Conferma e salva</button>
+ </footer>
+ </div>
+ </div>
+
+ <!-- OVERLAY SELEZIONE TAVOLI PER AVVISO NUOVI TAVOLI -->
+ <div id="org-avviso-tavoli-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiAvvisoNuoviTavoli()">
+ <div class="dialog modifica-dialog" style="max-width:560px" onclick="event.stopPropagation()">
+ <h3 class="modifica-dialog-title">Avviso nuovi tavoli</h3>
+ <div class="modifica-content" style="padding-top:4px">
+ <p style="font-size:13px;color:var(--smoke);margin:0 0 10px">
+ Seleziona i nuovi tavoli da includere nell'email di avviso.
+ </p>
+ <div id="org-avviso-tavoli-summary" class="hint" style="margin-bottom:8px"></div>
+ <div id="org-avviso-tavoli-list" style="display:grid;gap:8px;max-height:260px;overflow:auto;padding-right:4px"></div>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiAvvisoNuoviTavoli()">Annulla</button>
+ <button type="button" class="btn btn-s btn-sm" onclick="confermaSelezioneAvvisoNuoviTavoli()">Conferma e salva</button>
+ </footer>
+ </div>
+ </div>
+
+ <!-- OVERLAY DETTAGLIO EVENTO (registrazione) -->
+ <div id="evento-detail-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiDettaglioEvento()">
+ <div class="dialog user-detail-dialog" onclick="event.stopPropagation()">
+ <div class="card-head user-detail-head">
+ <div class="card-head-icon">🎲</div>
+ <h2 id="evento-detail-title">Dettaglio evento</h2>
+ <button type="button" class="btn btn-o btn-sm user-detail-close" onclick="chiudiDettaglioEvento()" aria-label="Chiudi">✕</button>
+ </div>
+ <div id="evento-detail-content" class="user-detail-content"></div>
+ </div>
+ </div>
+
+ <!-- OVERLAY DETTAGLIO TAVOLO (registrazione) -->
+ <div id="tavolo-detail-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiDettaglioTavolo()">
+ <div class="dialog user-detail-dialog" onclick="event.stopPropagation()">
+ <div class="card-head user-detail-head">
+ <div class="card-head-icon">🧩</div>
+ <h2 id="tavolo-detail-title">Dettaglio tavolo</h2>
+ <button type="button" class="btn btn-o btn-sm user-detail-close" onclick="chiudiDettaglioTavolo()" aria-label="Chiudi">✕</button>
+ </div>
+ <div id="tavolo-detail-content" class="user-detail-content"></div>
+ </div>
+ </div>
+
+</div><!-- /wrap -->
+
+<!-- ═══════════════════════════════════════════
+ JAVASCRIPT
+═══════════════════════════════════════════ -->
+<script src="assets/js/config.js"></script>
+<script src="assets/js/environment.js"></script>
+<script src="assets/js/api-client.js"></script>
+<script src="assets/js/bootstrap.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/session.js"></script>
+</body>
+</html>
