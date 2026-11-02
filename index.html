@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Gilda dei Dadi</title>
+<style>
+  :root {
+    --ink: #1a0e06;
+    --ember: #c05a1e;
+    --gold: #c9922a;
+    --parch: #f5ede0;
+    --vellum: #e8d9c4;
+    --smoke: #7a5c3e;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: grid;
+    place-items: center;
+    padding: 2rem 1.25rem;
+    background: radial-gradient(circle at 50% 0%, #fffaf2 0%, var(--parch) 55%, var(--vellum) 100%);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55;
+  }
+  main {
+    max-width: 34rem;
+    text-align: center;
+  }
+  .logo { width: 72px; height: 72px; margin: 0 auto 1.25rem; display: block; }
+  h1 {
+    margin: 0 0 .5rem;
+    font-size: clamp(1.6rem, 5vw, 2.1rem);
+    font-weight: 700;
+    letter-spacing: -.01em;
+  }
+  .lead { margin: 0 0 1.75rem; color: var(--smoke); }
+  .cta {
+    display: inline-block;
+    padding: .8rem 1.6rem;
+    border-radius: 999px;
+    background: var(--ember);
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 6px 18px rgba(192, 90, 30, .28);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .cta:hover, .cta:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(192, 90, 30, .34);
+  }
+  .cta:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+  .note {
+    margin: 1.75rem 0 0;
+    font-size: .82rem;
+    color: var(--smoke);
+  }
+  .note strong { color: var(--ember); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <svg class="logo" viewBox="0 0 52 52" role="img" aria-label="Gilda dei Dadi">
+    <rect x="4" y="4" width="44" height="44" rx="10" stroke="#c05a1e" stroke-width="2.5" fill="#fdf6ec"/>
+    <circle cx="17" cy="17" r="4" fill="#c9922a"/>
+    <circle cx="35" cy="17" r="4" fill="#c9922a"/>
+    <circle cx="26" cy="26" r="4" fill="#c9922a"/>
+    <circle cx="17" cy="35" r="4" fill="#c9922a"/>
+    <circle cx="35" cy="35" r="4" fill="#c9922a"/>
+  </svg>
+
+  <h1>Gilda dei Dadi</h1>
+  <p class="lead">
+    Stiamo spostando prenotazioni, area utente e pannello organizzatore sul nuovo
+    portale. L'area di prova è già attiva: gli eventi che vedrai sono di esempio.
+  </p>
+
+  <a class="cta" href="./stage/">Apri l'area di prova</a>
+
+  <p class="note">
+    Associazione Gilda dei Dadi · Vanzago<br>
+    Area di prova <strong>v0.1.2</strong>
+  </p>
+</main>
+</body>
+</html>
