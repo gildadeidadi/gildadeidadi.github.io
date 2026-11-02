@@ -7033,3 +7033,7 @@ label.fb-q textarea{width:100%;box-sizing:border-box;padding:9px 10px;font-size:
 .acc-row-mail{font-size:14px;color:var(--ember2);overflow-wrap:anywhere;margin-top:2px}
 .acc-row-meta{font-size:12.5px;color:var(--smoke);margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .acc-row-btn{flex-shrink:0;min-width:104px}
+
+/* Emblema su disco bianco circolare (logo-mark-*.png): bordo e ombra
+   devono seguire il tondo, non il quadrato dell'immagine. */
+.h-logo-wrap img{ border-radius:50%; }
