@@ -7037,3 +7037,144 @@ label.fb-q textarea{width:100%;box-sizing:border-box;padding:9px 10px;font-size:
 /* Emblema su disco bianco circolare (logo-mark-*.png): bordo e ombra
    devono seguire il tondo, non il quadrato dell'immagine. */
 .h-logo-wrap img{ border-radius:50%; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   STILE PIATTO
+   Il CSS legacy costruiva ogni superficie con gradienti, bagliori e
+   pillole. Questa coda riporta il portale a tinte piene, ombre discrete
+   e forme piu' nette: resta il carattere pergamena/brace, sparisce
+   l'effetto template. Le regole vincono per ordine di apparizione.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root{
+  --radius:10px;
+  --radius-s:6px;
+  --radius-l:14px;
+  --shadow:0 1px 2px rgba(26,14,6,.05), 0 6px 18px rgba(26,14,6,.07);
+  --shadow-l:0 2px 4px rgba(26,14,6,.06), 0 16px 34px rgba(26,14,6,.11);
+  --glow-e:rgba(192,90,30,.14);
+  --glow-g:rgba(201,146,42,.12);
+  --glow-ok:rgba(46,125,50,.12);
+  --ease:cubic-bezier(.2,.7,.3,1);
+}
+
+/* Sfondo: resta solo la grana della carta, via gli aloni radiali. */
+body::before{
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='.025'/%3E%3C/svg%3E") repeat;
+}
+body{background-image:none}
+body::after{background:#4a2412}
+
+/* Header: un solo marrone pieno, niente pattern a crocette. */
+header{background:#4a2412;border-bottom:1px solid #6b3a1d}
+header::before{background:none}
+header.header-org .org-macro-btn.active{background:#f3e6d6}
+header.header-org .org-macro-btn,
+.sede-auth-tab,
+.fchip,
+.u-main-tab,
+#sede-main .coorg-sess-tab,
+.mappa-sess-subtabs .sess-subtab{border-radius:8px}
+
+/* Bottoni: tinta unita, ombra neutra, niente riflesso interno. */
+.btn::before{background:none}
+.btn-p{background:#a8491a;box-shadow:0 1px 2px rgba(26,14,6,.14)}
+.btn-p:hover{background:#8b3a0e;box-shadow:0 2px 6px rgba(26,14,6,.16)}
+.btn-g{background:#b8790e;box-shadow:0 1px 2px rgba(26,14,6,.12)}
+.btn-s{background:#2e7d32;box-shadow:0 1px 2px rgba(26,14,6,.12)}
+.btn-d{background:#9b1c1c;box-shadow:0 1px 2px rgba(26,14,6,.12)}
+.btn:disabled,.btn[disabled]{background:var(--vellum);color:var(--smoke);box-shadow:none;cursor:not-allowed}
+
+/* Tab e filtri: attivo a tinta piena, separatori netti. */
+.tab-btn.active,
+.sede-auth-tab.active,
+#sede-main .coorg-sess-tab.active,
+.mappa-sess-btn.active{background:#a8491a;box-shadow:none}
+.tabs-sep{background:var(--vellum)}
+.tabs{backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* Card e intestazioni. */
+.card-head{background:#8b3a0e;border-bottom:1px solid rgba(201,146,42,.35)}
+.login-head{background:#241203}
+.invite-flow-card .card-head{background:#f7e9d9;border-bottom-color:var(--vellum)}
+
+/* Barre e indicatori: colori pieni. */
+.bar-full{background:#b71c1c}
+.bar-few{background:#e65100}
+.bar-ok{background:#2e7d32}
+.fb-fill{background:#a8491a}
+.fascia-bar.is-main .fb-fill{background:#c05a1e}
+.mev-progress-fill{background:#a8491a}
+.mappa-ctx-fill > span{background:#8b3a0e}
+.rs-line.done{background:#2e7d32}
+.u-tl-dot{background:#8b3a0e}
+.att-tag{background:#2e7d32}
+.mtav-avatar,.reg-step.active .rs-num{background:#a8491a;box-shadow:none}
+.mattesa-avatar,.mtav-attesa .mtav-avatar{background:#b8790e}
+
+/* Filetti decorativi: linea piena invece di sfumatura. */
+.stat-c::before,
+.dialog::before,
+.mappa-ev-card::before,
+.reg-ev-card::before{background:#8b3a0e}
+.notify-popup-card.notify-popup-ok::before{background:#2e7d32}
+.notify-popup-card.notify-popup-err::before{background:#b71c1c}
+.notify-popup-card.notify-popup-info::before{background:#c05a1e}
+.grp-header::before,.grp-header::after,
+.divider::before,.divider::after{background:var(--vellum)}
+.tc::before{background:none}
+
+/* Superfici chiare: tinte piatte al posto delle sfumature. */
+.u-hier-card,
+.u-hier-booking,
+.u-tl-item,
+.bk-pren-tavolo,
+.home-recupera-bar,
+.invite-flow-card,
+.mattesa-card,
+.reg-tav-card.selected,
+.reg-tav-attesa-card,
+.reg-riepilogo,
+.org-tav-edit-avv-box{background:var(--parch3)}
+.u-hier-session,
+.u-hier-event-nested,
+.u-ev-selected,
+.u-hier-l1,
+.bk-head,
+.ev-acc-item,
+.ev-add-accordion,
+.modifica-dialog .form-sec,
+.bk-edit-summary,
+.tav-fasce-inline{background:var(--parch2)}
+.u-hier-session__head,
+.u-hier-session__body,
+.u-hier-event__head--nested,
+.u-hier-tavolo,
+.u-hier-tavolo__head,
+.u-ev-pill.active,
+.u-main-tab.active,
+.tc.sel,
+.tc.tc-attesa{background:var(--parch3)}
+.ev-head:hover,
+.u-hier-session__head:hover,
+.u-hier-tavolo__head:hover,
+.ev-acc-head:hover{background:#f8ecdd}
+.bk-card-attesa,
+.u-hier-card.bk-card-attesa,
+.tipo-badge.sys,
+.fchip.on,
+.reg-tav-attesa-card:hover{background:#fbf0df}
+.bk-add-sess-wrap,
+.modifica-inline-wrap{background:transparent}
+.fchip.on{box-shadow:none}
+#org-main .org-tbl-scroll table.pren tbody tr:hover,
+table.pren tbody tr:hover{background:#fff8f2}
+.u-ev-pill.active{box-shadow:0 0 0 2px rgba(168,73,26,.16)}
+.u-hier-session{box-shadow:0 2px 8px rgba(61,37,18,.05)}
+#sede-main .coorg-event-top,
+.coorg-event-top{background:var(--parch3)}
+
+/* Forme: badge piu' squadrati, niente pillole sui controlli. */
+.org-badge,
+.tipo-badge,
+.badge{border-radius:6px}
