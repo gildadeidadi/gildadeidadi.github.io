@@ -4781,7 +4781,7 @@ function renderRegEventi() {
  : `<span>Prenota <span style="font-size:14px">→</span></span>`;
 
  return `
- <div class="reg-ev-card${inApertura ? " disabled" : ""}"${cardOnclick} style="animation-delay:${i*.07}s">
+ <div class="reg-ev-card${inApertura ? " disabled" : ""}"${cardOnclick} style="animation-delay:${Math.min(i, 6)*.04}s">
  <div class="rec-body">
  <div class="rec-nome">${ev.nome}</div>
  ${regHtmlTipiTavolo(ev.tipiTavolo)}
@@ -5116,36 +5116,18 @@ function regSelezionaSessioneGdt(sessId, btn) {
 }
 
 function regPreloadEventiDisponibilitaTavoli(onDone) {
- if (!Array.isArray(eventiReg) || !eventiReg.length) {
- if (typeof onDone === "function") onDone();
- return;
- }
+ // Non chiedere i tavoli di ogni sessione all'apertura della home: con molti
+ // eventi sono decine di chiamate e bloccano prenota e dettaglio. Le card
+ // restano prenotabili; l'assenza di tavoli si vede aprendo l'evento.
+ if (Array.isArray(eventiReg)) {
  const map = window._regEventHasTavoliMap || {};
  window._regEventHasTavoliMap = map;
- const pendingIds = [];
  eventiReg.forEach(ev => {
  const evId = String(ev?.eventId || "").trim();
- if (!evId || Object.prototype.hasOwnProperty.call(map, evId)) return;
- map[evId] = true; // fallback: se il controllo fallisce non blocchiamo iscrizione
- pendingIds.push(evId);
+ if (evId && !Object.prototype.hasOwnProperty.call(map, evId)) map[evId] = true;
  });
- if (!pendingIds.length) {
- if (typeof onDone === "function") onDone();
- return;
  }
- let pending = pendingIds.length;
- const finishOne = () => {
- pending--;
- if (pending <= 0 && typeof onDone === "function") onDone();
- };
- eventiReg.forEach(ev => {
- const evId = String(ev?.eventId || "").trim();
- if (!evId || pendingIds.indexOf(evId) < 0) return;
- regEventoHaTavoliAttivi(ev, (haTavoli) => {
- map[evId] = !!haTavoli;
- finishOne();
- });
- });
+ if (typeof onDone === "function") onDone();
 }
 
 function regSelezionaSessione(sessId, btn) {
