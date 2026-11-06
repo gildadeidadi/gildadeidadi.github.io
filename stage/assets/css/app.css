@@ -7093,7 +7093,7 @@ header.header-org{
     linear-gradient(180deg, rgba(42,18,8,.58), rgba(74,32,8,.78)),
     url("../img/dice-parchment.jpg");
   background-repeat:no-repeat;
-  background-position:center, center 32%;
+  background-position:center, center;
   background-size:cover;
 }
 header::before{opacity:0}
