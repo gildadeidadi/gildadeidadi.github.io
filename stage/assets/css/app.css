@@ -7167,3 +7167,26 @@ body{background-color:#f7f1e6}
   border:1px solid #e7d7c4;
   border-radius:12px;
 }
+
+/* Prova sans: Lato per testo, etichette e titoli. Cinzel resta solo sul nome in testata. */
+:root{
+  --font-b:'Lato','Segoe UI',sans-serif;
+  --font-d:'Lato','Segoe UI',sans-serif;
+  --font-m:'Lato','Segoe UI',sans-serif;
+}
+body{line-height:1.5}
+header h1,.h-org-name{font-family:'Cinzel',serif}
+
+.reg-ev-card{cursor:pointer}
+.reg-ev-card:focus-visible{outline:2px solid var(--ember2);outline-offset:3px}
+.home-recupera-bar{margin-top:18px}
+/* La fascia di riserva sotto l'header è dello stesso castano: un pixel arrotondato non diventa una riga arancio. */
+body{
+  background-image:linear-gradient(#4a2008,#4a2008);
+}
+body::after{background:#4a2008}
+header,
+header.header-org{
+  border-bottom:2px solid #3a1c0a;
+  box-sizing:border-box;
+}

@@ -4781,7 +4781,7 @@ function renderRegEventi() {
  : `<span>Prenota <span style="font-size:14px">→</span></span>`;
 
  return `
- <div class="reg-ev-card${inApertura ? " disabled" : ""}"${cardOnclick} style="animation-delay:${Math.min(i, 6)*.04}s">
+ <div class="reg-ev-card${inApertura ? " disabled" : ""}"${cardOnclick}${inApertura ? "" : ` tabindex="0" role="link" onkeydown="if(event.key==='Enter'){event.preventDefault();regSelezionaEvento('${ev.eventId}')}"`} style="animation-delay:${Math.min(i, 6)*.04}s">
  <div class="rec-body">
  <div class="rec-nome">${ev.nome}</div>
  ${regHtmlTipiTavolo(ev.tipiTavolo)}
