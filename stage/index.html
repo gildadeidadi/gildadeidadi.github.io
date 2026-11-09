@@ -6,19 +6,16 @@
 <meta name="theme-color" content="#8B4513">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Gilda dei Dadi</title>
-<link rel="icon" type="image/png" sizes="96x96" href="assets/img/logo-mark-96.png">
-<link rel="apple-touch-icon" href="assets/img/logo-touch-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Lato:wght@400;700&display=swap" rel="stylesheet">
-<link rel="preload" as="image" href="assets/img/dice-parchment.jpg">
-<link rel="stylesheet" href="assets/css/app.css">
-<script src="assets/js/config.js" defer></script>
-<script src="assets/js/environment.js" defer></script>
-<script src="assets/js/api-client.js" defer></script>
-<script src="assets/js/bootstrap.js" defer></script>
-<script src="assets/js/app.js" defer></script>
-<script src="assets/js/session.js" defer></script>
+<link rel="icon" type="image/png" sizes="96x96" href="assets/img/logo-mark-96.png?v=v0.1.12">
+<link rel="apple-touch-icon" href="assets/img/logo-touch-192.png?v=v0.1.12">
+<link rel="preload" as="image" href="assets/img/dice-parchment.jpg?v=v0.1.12">
+<link rel="stylesheet" href="assets/css/app.css?v=v0.1.12">
+<script src="assets/js/config.js?v=v0.1.12" defer></script>
+<script src="assets/js/environment.js?v=v0.1.12" defer></script>
+<script src="assets/js/api-client.js?v=v0.1.12" defer></script>
+<script src="assets/js/bootstrap.js?v=v0.1.12" defer></script>
+<script src="assets/js/app.js?v=v0.1.12" defer></script>
+<script src="assets/js/session.js?v=v0.1.12" defer></script>
 </head>
 <body>
 <!--
@@ -30,7 +27,7 @@
  <div class="h-inner">
  <div class="h-brand-row" id="h-brand-row" style="display:flex;justify-content:center">
  <a href="https://www.wakeupvanzago.it/gilda-dei-dadi" target="_blank" class="h-logo-wrap">
- <img id="h-logo" src="assets/img/logo-mark-192.png" alt="Gilda dei Dadi">
+ <img id="h-logo" src="assets/img/logo-mark-192.png?v=v0.1.12" alt="Gilda dei Dadi">
  <span class="h-org-name" data-org-name>Gilda dei Dadi</span>
  </a>
  </div>
@@ -110,6 +107,8 @@
  <input type="password" id="org-pwd" onkeydown="if(event.key==='Enter')verificaOrg()" placeholder="••••••••••" autocomplete="off">
  <button class="pwd-tog" onclick="togglePwd('org-pwd')" type="button">👁</button>
  </div>
+<div id="org-otp-wrap" class="hidden" style="margin-top:12px;padding:12px 14px;border-radius:var(--radius);background:rgba(192,90,30,.08);border-left:4px solid var(--ember)"><p class="hint" id="org-otp-msg" style="margin:0 0 8px"></p><button type="button" class="btn btn-o btn-sm" onclick="richiediOtpLogin('org')">Invia codice via email</button><label class="lbl" for="org-otp" style="margin-top:10px">Codice ricevuto via email</label><input type="text" id="org-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 cifre"></div>
+
  </div>
  <div class="login-err" id="org-err"></div>
  <p style="margin-top:8px;font-size:12px;color:var(--smoke);line-height:1.5">
@@ -117,6 +116,28 @@
  </p>
  <div style="margin-top:20px">
  <button class="btn btn-p btn-full btn-lg" onclick="verificaOrg()">Accedi &rarr;</button>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- ═══ ACCESSO MASTER (codice email) ═══ -->
+ <div id="master-login" class="hidden">
+ <div class="login-box">
+ <div class="login-head">
+ <h2>🎲 Accesso Master</h2>
+ <p>Ti invieremo un codice a 6 cifre all’email del tuo profilo master.</p>
+ </div>
+ <div class="login-body">
+ <p class="hint" id="master-login-hint" style="margin-bottom:10px">Invia un codice all’email del tuo profilo.</p>
+ <button type="button" class="btn btn-s btn-full" id="master-otp-send-btn" onclick="inviaOtpMasterLogin()">Invia codice</button>
+ <div class="field" style="margin-top:14px">
+ <label class="lbl" for="master-otp-code">Codice ricevuto</label>
+ <input type="text" id="master-otp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456" onkeydown="if(event.key==='Enter')verificaOtpMasterLogin()">
+ </div>
+ <div class="login-err" id="master-login-err" aria-live="polite"></div>
+ <div style="margin-top:14px">
+ <button type="button" class="btn btn-p btn-full btn-lg" onclick="verificaOtpMasterLogin()">Accedi con codice →</button>
  </div>
  </div>
  </div>
@@ -190,6 +211,8 @@
  <input type="password" id="acc-pwd" onkeydown="if(event.key==='Enter')verificaAccoglienza()" placeholder="••••••••••" autocomplete="off">
  <button class="pwd-tog" onclick="togglePwd('acc-pwd')" type="button">👁</button>
  </div>
+<div id="acc-otp-wrap" class="hidden" style="margin-top:12px;padding:12px 14px;border-radius:var(--radius);background:rgba(192,90,30,.08);border-left:4px solid var(--ember)"><p class="hint" id="acc-otp-msg" style="margin:0 0 8px"></p><button type="button" class="btn btn-o btn-sm" onclick="richiediOtpLogin('acc')">Invia codice via email</button><label class="lbl" for="acc-otp" style="margin-top:10px">Codice ricevuto via email</label><input type="text" id="acc-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 cifre"></div>
+
  </div>
  <div class="login-err" id="acc-err"></div>
  <p style="margin-top:8px;font-size:12px;color:var(--smoke);line-height:1.5">
@@ -1212,7 +1235,6 @@
  </div>
  </div>
 
- <p style="margin-top:20px;text-align:center;font-size:13px;color:var(--ash)"><a href="#" onclick="event.preventDefault();apriFeedback('dashboard_organizzatore')" style="color:var(--ember);border-bottom:1px dashed var(--ember)">Lascia un feedback</a></p>
  </div><!-- /org-main -->
 
  <!-- ═══ FORM REGISTRAZIONE (HOME) ═══ -->
@@ -1239,37 +1261,42 @@
 
  <!-- Intro home (step 1) -->
  <div id="reg-home-intro" class="reg-home-intro">
- <p class="reg-home-intro-p" id="reg-home-intro-p">Prenota in <strong>4 passi</strong>: scegli l'evento, inserisci i tuoi dati, seleziona i tavoli e infine conferma eventuali partecipanti. Riceverai un'email con il link per modificare la prenotazione quando vuoi.</p>
+ <p class="reg-home-intro-p" id="reg-home-intro-p"><b>Prenotarsi è semplice!</b><br>scegli l'evento, inserisci i tuoi dati, scegli il tavolo se è un GDR e conferma chi partecipa.</p>
  </div>
 
  <!-- ── STEP INDICATOR ── -->
  <div class="reg-steps" id="reg-steps">
  <div class="reg-step active" id="rs-1">
  <div class="rs-num">1</div>
- <div class="rs-lbl">📜 Evento</div>
+ <div class="rs-lbl rs-lbl-stack"><span>📜</span><span>Evento</span></div>
  </div>
  <div class="rs-line" id="rs-line-1"></div>
  <div class="reg-step" id="rs-2">
  <div class="rs-num">2</div>
- <div class="rs-lbl" id="rs-2-lbl">📝 Dati</div>
+ <div class="rs-lbl rs-lbl-stack" id="rs-2-lbl"><span>📝</span><span>Dati</span></div>
  </div>
- <div class="rs-line rs-gdr-only" id="rs-line-2"></div>
- <div class="reg-step rs-gdr-only" id="rs-3">
+ <div class="rs-line-q rs-unknown" id="rs-line-q"></div>
+ <div class="reg-step rs-unknown" id="rs-q">
+ <div class="rs-num">?</div>
+ <div class="rs-lbl rs-lbl-stack"><span>❔</span><span>Dettagli</span></div>
+ </div>
+ <div class="rs-line rs-gdr-only hidden" id="rs-line-2"></div>
+ <div class="reg-step rs-gdr-only hidden" id="rs-3">
  <div class="rs-num">3</div>
- <div class="rs-lbl">🎲 Tavolo</div>
+ <div class="rs-lbl rs-lbl-stack"><span>🎲</span><span>Tavolo</span></div>
  </div>
- <div class="rs-line rs-gdr-only" id="rs-line-3"></div>
- <div class="reg-step rs-gdr-only" id="rs-4">
+ <div class="rs-line rs-gdr-only hidden" id="rs-line-3"></div>
+ <div class="reg-step rs-gdr-only hidden" id="rs-4">
  <div class="rs-num">4</div>
- <div class="rs-lbl">👥 Partecipanti</div>
+ <div class="rs-lbl rs-lbl-stack"><span>👥</span><span>Partecipanti</span></div>
  </div>
  </div>
 
  <!-- ── STEP 1: scegli evento, poi il tipo se l'evento è misto ── -->
  <div id="reg-s1">
  <div id="reg-s1-lista">
- <div class="reg-step-title">📜 Scegli un evento</div>
- <p class="reg-step-desc">Clicca sulla card dell'evento a cui vuoi partecipare per vedere le aree e i tavoli disponibili. Sulle card compaiono i badge <strong>GDR</strong> (gioco di ruolo) e <strong>GDT</strong> (gioco da tavolo) in base a cosa è previsto per quell'evento.</p>
+ <div class="reg-step-title">📜 Scegli l'evento</div>
+ <p class="reg-step-desc">Tocca la card dell'evento che ti interessa. I badge ti dicono cosa è previsto:<br><strong>GDR</strong> per i giochi di ruolo a tavoli, <strong>GDT</strong> per il gioco da tavolo libero.</p>
  <div id="reg-ev-grid" class="reg-ev-grid"></div>
  </div>
  <div id="reg-misto-scelta" class="hidden">
@@ -1360,6 +1387,7 @@
  </div>
 
  <div style="margin-top:20px">
+ <div id="reg-minori-gdr" class="hidden" style="margin:14px 0 0;padding:12px 14px;background:rgba(192,90,30,.08);border-radius:var(--radius);border-left:4px solid var(--ember)"><label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;color:var(--ink2)"><input type="checkbox" id="reg-minori-ok-gdr" style="margin-top:3px"><span>Tra le fasce selezionate c'è un minorenne: confermo che la prenotazione è fatta da un genitore o da chi ne ha la responsabilità, o che questi ne è a conoscenza.</span></label></div>
  <button class="btn btn-s btn-lg btn-full" id="reg-s2-next" onclick="regPassaStep4()" disabled>Continua ai partecipanti →</button>
  </div>
  </div>
@@ -1374,6 +1402,7 @@
  </span>
  </div>
  <p class="reg-step-desc" id="reg-s3-desc">Inserisci i dati del prenotante, poi prosegui alla scelta dei tavoli.</p>
+ <p class="hint" style="font-size:13px;margin:0 0 14px">Proseguendo confermi di aver letto l'<a href="https://www.wakeupvanzago.it/gilda-dei-dadi/informativa-privacy/" target="_blank" rel="noopener">informativa privacy</a>.</p>
 
  <div id="reg-gdt-sess-wrap" class="hidden" style="margin-bottom:16px">
  <div style="font-family:var(--font-m);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ash);margin-bottom:10px">🧭 Seleziona l'area</div>
@@ -1398,6 +1427,7 @@
  <div class="lbl-fasce" id="reg-gdt-fasce-lbl" style="margin:16px 0 8px">🎯 Fasce età del gruppo</div>
  <div class="fasce-grid" id="reg-gdt-fasce-chips"></div>
  <div class="tav-fasce-req" id="reg-gdt-fasce-req">Seleziona almeno una fascia età</div>
+ <div id="reg-minori-gdt" class="hidden" style="margin:14px 0 0;padding:12px 14px;background:rgba(192,90,30,.08);border-radius:var(--radius);border-left:4px solid var(--ember)"><label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;color:var(--ink2)"><input type="checkbox" id="reg-minori-ok-gdt" style="margin-top:3px"><span>Tra le fasce selezionate c'è un minorenne: confermo che la prenotazione è fatta da un genitore o da chi ne ha la responsabilità, o che questi ne è a conoscenza.</span></label></div>
  <p class="hint" style="margin-top:10px;margin-bottom:0">Non serve indicare i nominativi: conta il numero di posti e le fasce età.</p>
  </div>
  </div>
@@ -1442,6 +1472,20 @@
  </div>
  </div>
  </div>
+
+ <div id="reg-iscrizione-extra" class="hidden" style="margin-top:16px">
+<div id="reg-esperienza-wrap" class="field first hidden">
+<label class="lbl">La mia esperienza di gioco <span class="lbl-note" style="color:var(--err)">*</span></label>
+<div id="reg-esperienza-opts" style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+<label style="display:flex;gap:10px;align-items:center;cursor:pointer;font-size:14px;color:var(--ink2)"><input type="radio" name="r-esperienza" value="Poca/nessuna"> <span>Poca/nessuna</span></label>
+<label style="display:flex;gap:10px;align-items:center;cursor:pointer;font-size:14px;color:var(--ink2)"><input type="radio" name="r-esperienza" value="Principiante"> <span>Principiante</span></label>
+<label style="display:flex;gap:10px;align-items:center;cursor:pointer;font-size:14px;color:var(--ink2)"><input type="radio" name="r-esperienza" value="Media"> <span>Media</span></label>
+<label style="display:flex;gap:10px;align-items:center;cursor:pointer;font-size:14px;color:var(--ink2)"><input type="radio" name="r-esperienza" value="Elevata"> <span>Elevata</span></label>
+</div>
+</div>
+<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;color:var(--ink2);margin-top:12px"><input type="checkbox" id="r-newsletter" style="margin-top:3px"><span>Iscrivimi alla mailing list per novità e prossimi eventi. Facoltativo, revocabile in ogni momento.</span></label>
+<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;color:var(--ink2);margin-top:12px"><input type="checkbox" id="r-consenso-immagine" style="margin-top:3px"><span>Acconsento all'uso della mia immagine in foto e riprese dell'evento, per fini divulgativi e non commerciali. Facoltativo: la prenotazione non dipende da questo consenso.</span></label>
+</div>
 
  <div id="reg-s3-actions" style="margin-top:20px">
  <button class="btn btn-s btn-lg btn-full" id="reg-s3-next" onclick="regPassaStep3()">Continua alla scelta tavoli →</button>
@@ -1488,7 +1532,6 @@
  Hai già una prenotazione?
  <a href="#" onclick="mostraRecupera(event)" style="color:var(--ember);font-weight:600;text-decoration:none;border-bottom:1px dashed var(--ember)">Recupera il link →</a>
  </p>
- <p style="font-size:13px;color:var(--ash);margin-top:10px"><a href="#" onclick="event.preventDefault();apriFeedback('registrazione')" style="color:var(--ember);border-bottom:1px dashed var(--ember)">Lascia un feedback</a></p>
  </div>
 
  <!-- hidden inputs per compatibilità con inviaReg() -->
@@ -1532,7 +1575,6 @@
  <p style="font-size:13.5px;color:var(--smoke);font-style:italic">Non hai ricevuto l'email? Controlla la cartella spam oppure</p>
  <button class="btn btn-o btn-sm" style="margin-top:10px" onclick="hide('reg-ok');show('reg-recupera')">🔗 Richiedi nuovamente il link</button>
  </div>
- <p style="margin-top:20px;font-size:13px;color:var(--ash)">Vuoi inviarci un <a href="#" onclick="event.preventDefault();apriFeedback('registrazione')" style="color:var(--ember);border-bottom:1px dashed var(--ember)">feedback</a>?</p>
  </div>
  </div>
  </div>
@@ -1680,7 +1722,6 @@
  </div>
  </div>
 
- <p style="margin-top:24px;text-align:center;font-size:13px;color:var(--ash)"><a href="#" onclick="event.preventDefault();apriFeedback('area_utente')" style="color:var(--ember);border-bottom:1px dashed var(--ember)">Lascia un feedback</a></p>
  </div>
 
  <!-- ═══ AREA MASTER ═══ -->
@@ -2616,6 +2657,20 @@
  </div>
 
 </div><!-- /wrap -->
+
+<footer class="site-footer">
+ <div class="site-footer-inner">
+  <p class="site-footer-brand"><a href="https://www.wakeupvanzago.it/gilda-dei-dadi/" target="_blank" rel="noopener">Gilda dei Dadi</a></p>
+  <p>Realtà ludica di <a href="https://www.wakeupvanzago.it/" target="_blank" rel="noopener">WakeUp Vanzago</a></p>
+  <p class="site-footer-address">Via del Lazzaretto 4<br>20043 Vanzago (MI)<br>C.F. 93547960158</p>
+  <nav class="site-footer-nav" aria-label="Informazioni">
+   <a href="https://www.wakeupvanzago.it/gilda-dei-dadi/informativa-privacy/" target="_blank" rel="noopener">Informativa privacy</a>
+   <a href="mailto:lagildadeidadi@gmail.com">Per info: lagildadeidadi@gmail.com</a>
+   <a href="#" onclick="event.preventDefault();apriFeedback('footer')">Feedback sul portale e segnalazione errori</a>
+  </nav>
+  <p class="site-footer-note">Il sito non usa cookie di profilazione.</p>
+ </div>
+</footer>
 
 <!-- ═══════════════════════════════════════════
  JAVASCRIPT

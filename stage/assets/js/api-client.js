@@ -172,8 +172,13 @@
         if (done) return;
         done = true;
         if (timer) clearTimeout(timer);
-        try { delete window[callbackName]; } catch (err) { window[callbackName] = undefined; }
+        // No-op al posto di delete: una risposta tardiva (cold start > timeout)
+        // non deve lanciare ReferenceError in console.
+        window[callbackName] = function () {};
         if (script.parentNode) script.parentNode.removeChild(script);
+        setTimeout(function () {
+          try { delete window[callbackName]; } catch (err) { window[callbackName] = undefined; }
+        }, Math.max(timeout, 60000));
       }
 
       window[callbackName] = function (payload) {
@@ -212,13 +217,53 @@
 
   function call(method, args) {
     if (!method) return Promise.reject(new Error("Metodo backend mancante"));
+    if (cfg.transport === "gas") return gasCall(method, args || []);
     return useJsonp() ? jsonpCall(method, args || []) : fetchCall(method, args || []);
+  }
+
+  var nativeRunGetter = null;
+  try {
+    var scriptObj = window.google && window.google.script;
+    var cursor = scriptObj;
+    while (cursor && !nativeRunGetter) {
+      var runDesc = Object.getOwnPropertyDescriptor(cursor, "run");
+      if (runDesc && runDesc.get) nativeRunGetter = runDesc.get.bind(scriptObj);
+      cursor = Object.getPrototypeOf(cursor);
+    }
+  } catch (err) {
+    nativeRunGetter = null;
+  }
+
+  function gasCall(method, args) {
+    return new Promise(function (resolve, reject) {
+      var runner = (window.__gildaRunGet && window.__gildaRunGet()) || window.__gildaRun || (nativeRunGetter ? nativeRunGetter() : null);
+      if (!runner || !runner.withSuccessHandler) {
+        reject(new Error("google.script.run non è disponibile"));
+        return;
+      }
+      runner
+        .withSuccessHandler(function (payload) {
+          try {
+            resolve(unwrap(payload));
+          } catch (err) {
+            try {
+              handleFailure(err);
+            } catch (rethrown) {
+              reject(rethrown);
+            }
+          }
+        })
+        .withFailureHandler(function (err) {
+          reject(err instanceof Error ? err : new Error(String(err && err.message || err || "Errore dal backend")));
+        })
+        .apiEsegui(method, args || [], readToken());
+    });
   }
 
   window.gildaApi = {
     call: call,
     endpoint: endpoint,
-    transport: function () { return useJsonp() ? "jsonp" : "fetch"; },
+    transport: function () { return cfg.transport === "gas" ? "gas" : (useJsonp() ? "jsonp" : "fetch"); },
     getToken: readToken,
     setToken: setToken,
     clearToken: clearToken

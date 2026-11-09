@@ -57,5 +57,5 @@
     timeoutMs: 30000
   };
 
-  window.GILDA_CONFIG = Object.assign(window.GILDA_CONFIG || {}, config);
+  window.GILDA_CONFIG = Object.assign(config, window.GILDA_CONFIG || {});
 })();

@@ -5,7 +5,6 @@ const UUID = String(APP_CONFIG.uuid || "");
 const MODE = String(APP_CONFIG.mode || "");
 const PAGINA = String(APP_CONFIG.pagina || "");
 const FEEDBACK_PARAMS = APP_CONFIG.feedbackParams || { evento: "", sessione: "" };
-const MASTER_TOKEN = String(APP_CONFIG.masterToken || "");
 const MASTER_ID = String(APP_CONFIG.masterId || "");
 const SEDE_ID = String(APP_CONFIG.sedeId || "");
 const BUILD_ID = String(APP_CONFIG.buildId || "");
@@ -358,10 +357,9 @@ function gildaMasterFromParent(ev) {
  const d = ev && ev.data;
  if (!d || d.type !== "gilda-master-creds") return;
  const credExisting = _masterCredential();
- if (credExisting.masterId || credExisting.masterToken) return;
+ if (credExisting.masterId) return;
  const masterId = String(d.masterId || d.master || d.uuid || "").trim();
- const token = String(d.token || d.masterToken || "").trim();
- if (!masterId && !token) return;
+ if (!masterId) return;
  if (_gildaMasterCredsApplied) return;
  _gildaMasterCredsApplied = true;
  try {
@@ -371,7 +369,6 @@ function gildaMasterFromParent(ev) {
  u.searchParams.delete("masterId");
  }
  u.searchParams.set("pagina", "master");
- if (token) u.searchParams.set("token", token);
  history.replaceState({}, "", u.toString());
  } catch (_e) {}
  setAppTitle("Area Master");
@@ -612,18 +609,48 @@ function inviteChiudiPannello() {
  _inviteRipristinaVistaReg();
 }
 
+const MASTER_SESSION_KEY = "gilda_master_session_v1";
+
+function _masterSessionLoad(masterId) {
+ try {
+ const raw = sessionStorage.getItem(MASTER_SESSION_KEY);
+ if (!raw) return "";
+ const o = JSON.parse(raw);
+ const stessoMaster = String(o?.masterId || "").toLowerCase() === String(masterId || "").trim().toLowerCase();
+ return (stessoMaster && o?.sessionToken) ? String(o.sessionToken) : "";
+ } catch (_e) {
+ return "";
+ }
+}
+
+function _masterSessionSave(masterId, sessionToken) {
+ try {
+ sessionStorage.setItem(MASTER_SESSION_KEY, JSON.stringify({
+ masterId: String(masterId || "").trim().toLowerCase(),
+ sessionToken: String(sessionToken || "").trim().toLowerCase()
+ }));
+ } catch (_e) {}
+}
+
+function _masterSessionClear() {
+ try { sessionStorage.removeItem(MASTER_SESSION_KEY); } catch (_e) {}
+}
+
+function _masterSessioneNonValida(res) {
+ return /Sessione scaduta|Accesso non autenticato/i.test(String(res?.errore || ""));
+}
+
 function _masterCredential() {
  const params = new URLSearchParams(window.location.search);
  const paginaNorm = String(PAGINA || "").toLowerCase().trim();
  const masterIdTemplate = (typeof MASTER_ID !== "undefined") ? MASTER_ID : "";
- const masterTokenTemplate = (typeof MASTER_TOKEN !== "undefined") ? MASTER_TOKEN : "";
  let masterId = String(params.get("masterId") || params.get("master") || masterIdTemplate || "").trim();
  if (!masterId && paginaNorm === "master") {
  masterId = String(params.get("uuid") || UUID || "").trim();
  }
  return {
- masterToken: String(params.get("masterToken") || params.get("token") || masterTokenTemplate || "").trim(),
- masterId
+ masterId,
+ sessionToken: _masterSessionLoad(masterId)
  };
 }
 
@@ -2327,14 +2354,98 @@ function confermaSedeIscrivi() {
  .sedeAggiungiIscrittoTavolo(cred, payload);
 }
 
+function mostraLoginMaster(masterId) {
+ window._masterLoginId = String(masterId || "").trim();
+ hide("loader");
+ hide("master-main");
+ hide("org-main");
+ hide("sede-main");
+ hide("sede-login");
+ hide("reg-main");
+ hide("user-main");
+ setMasterDashboardHeader(false);
+ setAppTitle("Area Master");
+ setHSub("Accesso con codice email");
+ show("master-login");
+ const hint = document.getElementById("master-login-hint");
+ if (hint) hint.textContent = "Invia un codice a 6 cifre all’email del tuo profilo master.";
+ const otpEl = document.getElementById("master-otp-code");
+ if (otpEl) otpEl.value = "";
+ const errEl = document.getElementById("master-login-err");
+ if (errEl) errEl.textContent = "";
+}
+
+function inviaOtpMasterLogin() {
+ const id = String(window._masterLoginId || "").trim();
+ const errEl = document.getElementById("master-login-err");
+ const hint = document.getElementById("master-login-hint");
+ const btn = document.getElementById("master-otp-send-btn");
+ if (!id) {
+ if (errEl) errEl.textContent = "Master non selezionato.";
+ return;
+ }
+ if (btn) btn.disabled = true;
+ if (errEl) errEl.textContent = "";
+ google.script.run
+ .withSuccessHandler(res => {
+ if (btn) btn.disabled = false;
+ if (!res || !res.ok) {
+ if (errEl) errEl.textContent = res?.errore || "Invio codice fallito.";
+ return;
+ }
+ if (hint) hint.textContent = res.messaggio || "Codice inviato.";
+ document.getElementById("master-otp-code")?.focus();
+ })
+ .withFailureHandler(err => {
+ if (btn) btn.disabled = false;
+ if (errEl) errEl.textContent = err?.message || String(err);
+ })
+ .richiediOtpMaster(id);
+}
+
+function verificaOtpMasterLogin() {
+ const id = String(window._masterLoginId || "").trim();
+ const otp = String(document.getElementById("master-otp-code")?.value || "").trim();
+ const errEl = document.getElementById("master-login-err");
+ if (!otp) {
+ if (errEl) errEl.textContent = "Inserisci il codice ricevuto via email.";
+ return;
+ }
+ beginActionOverlay("Verifica codice…");
+ google.script.run
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (!res || !res.ok) {
+ if (errEl) errEl.textContent = res?.errore || "Codice non valido.";
+ return;
+ }
+ _masterSessionSave(id, res.sessionToken);
+ hide("master-login");
+ setMasterDashboardHeader(true);
+ setAppTitle("Area Master");
+ setHSub("Gestisci le tue avventure");
+ show("loader");
+ caricaAreaMaster();
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ if (errEl) errEl.textContent = err?.message || String(err);
+ })
+ .verificaOtpMaster({ masterId: id, otp: otp });
+}
+
 function caricaAreaMaster() {
  setMasterDashboardHeader(true);
  const cred = _masterCredential();
- if (!cred.masterId && !cred.masterToken) {
+ if (!cred.masterId) {
  hide("loader");
  show("master-main");
  flash("master-fa", "Link master non valido: credenziali mancanti.", "err");
  requestAnimationFrame(syncOrgHeaderOffset);
+ return;
+ }
+ if (!cred.sessionToken) {
+ mostraLoginMaster(cred.masterId);
  return;
  }
  setLdr("Caricamento area master…");
@@ -2346,6 +2457,11 @@ function caricaAreaMaster() {
  setMasterDashboardHeader(true);
  requestAnimationFrame(syncOrgHeaderOffset);
  if (!res || !res.ok) {
+ if (_masterSessioneNonValida(res)) {
+ _masterSessionClear();
+ mostraLoginMaster(cred.masterId);
+ return;
+ }
  flash("master-fa", "⚠️ " + (res?.errore || "Errore caricamento area master."), "err");
  return;
  }
@@ -2486,7 +2602,6 @@ function avviaSchermataInvitoPartecipante(token) {
 // ── INIT ─────────────────────────────────────
 window.addEventListener("DOMContentLoaded", () => {
  applyHeaderBackgroundFromConfig();
- console.log("[app] build:", BUILD_ID, "| mode:", MODE, "| pagina:", PAGINA, "| uuid:", UUID ? "yes" : "no");
  updateMobileHeaderTopbar();
  // Due frame: misura header dopo layout (prenotazione/utente inclusi).
  requestAnimationFrame(() => {
@@ -2549,11 +2664,9 @@ window.addEventListener("DOMContentLoaded", () => {
  const params = new URLSearchParams(window.location.search);
  const paginaNorm = String(PAGINA || "").toLowerCase().trim();
  const uuidFromUrlEarly = String(params.get("uuid") || "").trim();
- const masterTokenFromUrl = String(params.get("masterToken") || params.get("token") || "").trim();
  const masterIdFromUrl = String(params.get("masterId") || params.get("master") || "").trim();
- const masterTokenTemplate = (typeof MASTER_TOKEN !== "undefined") ? MASTER_TOKEN : "";
  const masterIdTemplate = (typeof MASTER_ID !== "undefined") ? MASTER_ID : "";
- const hasMasterCred = !!(masterTokenFromUrl || masterIdFromUrl || masterTokenTemplate || masterIdTemplate
+ const hasMasterCred = !!(masterIdFromUrl || masterIdTemplate
  || (paginaNorm === "master" && uuidFromUrlEarly));
  if (paginaNorm === "master" || hasMasterCred) {
  setAppTitle("Area Master");
@@ -2994,7 +3107,7 @@ function ensureInitialViewVisible() {
  const accLogin = document.getElementById("accoglienza-login");
  const accMain = document.getElementById("accoglienza-main");
 
- const hasVisible = [loader, orgLogin, orgMain, masterMain, sedeMain, sedeLogin, regMain, userMain, noUuid, accLogin, accMain, document.getElementById("feedback-main")]
+ const hasVisible = [loader, orgLogin, orgMain, masterMain, sedeMain, sedeLogin, regMain, userMain, noUuid, accLogin, accMain, document.getElementById("master-login"), document.getElementById("feedback-main")]
  .some(el => el && !el.classList.contains("hidden"));
  if (hasVisible) return;
 
@@ -4097,9 +4210,20 @@ function regGdtSessioneIllimitata(sess) {
 function regApplyWizardModeForEvento(ev, sessOpt) {
  const sess = sessOpt || regSessSelezionata || (ev && ev.sessioni && ev.sessioni[0]) || null;
  const isIngresso = sessioneSenzaTavoli(sess);
- document.querySelectorAll(".rs-gdr-only").forEach(el => el.classList.toggle("hidden", isIngresso));
+ document.querySelectorAll(".rs-gdr-only").forEach(el => el.classList.toggle("hidden", isIngresso || !ev));
+ document.querySelectorAll(".rs-unknown").forEach(el => el.classList.toggle("hidden", !!ev));
  const lbl2 = document.getElementById("rs-2-lbl");
- if (lbl2) lbl2.textContent = isIngresso ? "🎲 Informazioni" : "📝 Dati";
+ if (lbl2) {
+  const ico = isIngresso ? "🎲" : "📝";
+  const word = isIngresso ? "Informazioni" : "Dati";
+  lbl2.classList.add("rs-lbl-stack");
+  lbl2.replaceChildren();
+  const s1 = document.createElement("span");
+  const s2 = document.createElement("span");
+  s1.textContent = ico;
+  s2.textContent = word;
+  lbl2.append(s1, s2);
+ }
  const title = document.getElementById("reg-s3-title");
  if (title) title.textContent = isIngresso ? "🎲 Invia informazioni" : "📝 I tuoi dati";
  const desc = document.getElementById("reg-s3-desc");
@@ -4338,6 +4462,7 @@ function inviaRegGdt() {
  popupErrorePrenotazione("⏳ Attendi il caricamento dei posti disponibili.");
  return;
  }
+ if (!regConsensoMinoriOk()) return;
  const nome = String(document.getElementById("r-nome")?.value || "").trim();
  const email = String(document.getElementById("r-email")?.value || "").trim();
  const cell = String(document.getElementById("r-cell")?.value || "").trim();
@@ -4382,7 +4507,9 @@ function inviaRegGdt() {
  sessioneId: sessId,
  fonte,
  prenotazioni: [{ tavolo, numPersone: num, fasciaEta: regGdtFasciaEta.trim() }],
- prenotantePartecipa: true
+ prenotantePartecipa: true,
+ consensoMinori: !!document.getElementById("reg-minori-ok-gdt")?.checked,
+ ...regDatiIscrizione()
  };
  if (typeof UUID !== "undefined" && UUID && String(UUID).trim()) {
  payloadReg.uuid = String(UUID).trim();
@@ -4638,7 +4765,8 @@ function caricaEventiReg() {
  })
  .withFailureHandler(err => {
  hide("loader"); show("reg-main");
- flash("reg-fa","Impossibile caricare gli eventi. Controlla la connessione e riprova.","err");
+ var dettaglio = err && err.message ? " " + err.message : "";
+ flash("reg-fa","Impossibile caricare gli eventi." + dettaglio,"err");
  })
  .getEventiConSessioni();
  });
@@ -4654,19 +4782,9 @@ function caricaUtente() {
  stopLiveSync();
  google.script.run
  .withSuccessHandler(r => {
- console.log("[caricaUtente] risposta getPrenotazioni:", r);
  if (r == null) {
- console.error("[caricaUtente] getPrenotazioni ha restituito null. Avvio diagnostica UUID…", UUID);
- google.script.run
- .withSuccessHandler(diag => {
- console.log("[caricaUtente] diagnosticaUuidUtente:", diag);
- mostraFallbackCaricamentoUtente("Errore di caricamento dati utente. Riprova tra pochi secondi.");
- })
- .withFailureHandler(err2 => {
- console.error("[caricaUtente] failure diagnosticaUuidUtente:", err2);
- mostraFallbackCaricamentoUtente("Risposta nulla da getPrenotazioni e diagnostica fallita.");
- })
- .diagnosticaUuidUtente(UUID);
+console.error("[caricaUtente] getPrenotazioni ha restituito null.");
+mostraFallbackCaricamentoUtente("Errore di caricamento dati utente. Riprova tra pochi secondi.");
  return;
  }
  if (Array.isArray(r?.fasceEta)) {
@@ -5518,6 +5636,74 @@ function aggiornaRegSummary() {
 }
 
 // ── Step 2 (dati) → 3 (tavoli) ─────────────────────────────
+/** Fascia "potenzialmente minorenne": il limite superiore dell'etichetta è sotto i 18 anni, o l'etichetta non è leggibile (in quel caso si chiede conferma). */
+function etaPotenzialmenteMinorenne(label) {
+ const s = String(label || "").trim();
+ if (!s) return false;
+ if (/over|oltre|\+|plus/i.test(s)) return false;
+ let max = null;
+ const under = s.match(/under\s*(\d+)/i);
+ const range = s.match(/(\d+)\s*[-–]\s*(\d+)/);
+ const single = s.match(/(\d+)/);
+ if (under) max = parseInt(under[1], 10) - 1;
+ else if (range) max = parseInt(range[2], 10);
+ else if (single) max = parseInt(single[1], 10);
+ return max === null || max < 18;
+}
+function regSelezioneMinorenni() {
+ const csvs = regIsGdtEvento()
+  ? [regGdtFasciaEta]
+  : [...Object.values(regTavoliSelezionati).map(t => t.fasciaEta || ""), regAttesaSelezionata ? (regAttesaFasciaEta || "") : ""];
+ return csvs.some(csv => String(csv || "").split(",").some(x => {
+  const l = labelFascia(x.trim());
+  return l && etaPotenzialmenteMinorenne(l);
+ }));
+}
+function regAggiornaMinori() {
+ const gdt = regIsGdtEvento();
+ const minors = regSelezioneMinorenni();
+ document.getElementById("reg-minori-gdr")?.classList.toggle("hidden", gdt || !minors);
+ document.getElementById("reg-minori-gdt")?.classList.toggle("hidden", !gdt || !minors);
+}
+document.addEventListener("click", () => setTimeout(regAggiornaMinori, 0));
+document.addEventListener("change", () => setTimeout(regAggiornaMinori, 0));
+function regConsensoMinoriOk() {
+ if (!regSelezioneMinorenni()) return true;
+ const cb = document.getElementById(regIsGdtEvento() ? "reg-minori-ok-gdt" : "reg-minori-ok-gdr");
+ if (cb?.checked) return true;
+ popupErrorePrenotazione("⚠️ Hai selezionato una fascia minorenne: conferma che la prenotazione è fatta da un genitore o da chi ne ha la responsabilità.");
+ return false;
+}
+
+/** Campi di iscrizione per i nuovi iscritti (non passati dall'area utente). */
+function regIscrizioneNuova() {
+ return !(typeof UUID !== "undefined" && UUID && datiUtente && datiUtente.persona);
+}
+function regAggiornaCampiIscrizione() {
+ const box = document.getElementById("reg-iscrizione-extra");
+ if (!box) return;
+ const nuova = regIscrizioneNuova();
+ box.classList.toggle("hidden", !nuova);
+ document.getElementById("reg-esperienza-wrap")?.classList.toggle("hidden", !nuova || regIsGdtEvento());
+}
+function regDatiIscrizione() {
+ const nuova = regIscrizioneNuova();
+ const esp = document.querySelector('input[name="r-esperienza"]:checked');
+ return {
+  utenteDaArea: !nuova,
+  esperienzaGioco: nuova && !regIsGdtEvento() && esp ? esp.value : "",
+  consensoNewsletter: nuova && !!document.getElementById("r-newsletter")?.checked,
+  consensoImmagine: nuova && !!document.getElementById("r-consenso-immagine")?.checked
+ };
+}
+function regValidaCampiIscrizione() {
+ const esp = document.getElementById("reg-esperienza-wrap");
+ if (!esp || esp.classList.contains("hidden")) return true;
+ if (document.querySelector('input[name="r-esperienza"]:checked')) return true;
+ popupErrorePrenotazione("⚠️ Seleziona la tua esperienza di gioco.");
+ return false;
+}
+
 function regPassaStep3() {
  if (regIsGdtEvento()) {
  inviaRegGdt();
@@ -5527,6 +5713,7 @@ function regPassaStep3() {
  const email = String(document.getElementById("r-email")?.value || "").trim();
  if (!nome) { logRegForm("validazione_fallita", "Nome mancante (fase dati)"); popupErrorePrenotazione("⚠️ Inserisci nome e cognome."); return; }
  if (!email || email.indexOf("@") < 0) { logRegForm("validazione_fallita", "Email non valida (fase dati)"); popupErrorePrenotazione("⚠️ L'indirizzo email deve contenere @."); return; }
+ if (!regValidaCampiIscrizione()) return;
 
  logRegForm("fase_dati_ok", "Continua alla scelta tavoli", { email, nome });
  setRegStep(3);
@@ -5540,6 +5727,7 @@ function regPassaStep4() {
  const entries = Object.values(regTavoliSelezionati);
  const hasScelta = entries.length > 0 || regAttesaSelezionata;
  if (!hasScelta) return;
+ if (!regConsensoMinoriOk()) return;
 
  if (regAttesaSelezionata) {
  if (!regAttesaFasciaEta || regAttesaFasciaEta.trim() === "") {
@@ -5769,6 +5957,7 @@ function regEmailInserita() {
 }
 
 function regAggiornaBloccoEmail() {
+ regAggiornaCampiIscrizione();
  const email = regEmailInserita();
  const senzaChiocciola = !!email && email.indexOf("@") < 0;
  const hint = document.getElementById("r-email-format");
@@ -5978,7 +6167,7 @@ function inviaReg() {
  : prenotazioni.map(p => p.tavolo).join(" | ");
  logRegForm("invio_avviato", detInvio, { eventId: evId, sessioneId: sessId, email, nome });
 
- const payloadReg = { nome, email, cellulare: cell, eventId: evId, sessioneId: sessId, fonte, prenotazioni, prenotantePartecipa: regPrenotantePartecipa };
+ const payloadReg = { nome, email, cellulare: cell, eventId: evId, sessioneId: sessId, fonte, prenotazioni, prenotantePartecipa: regPrenotantePartecipa, consensoMinori: !!document.getElementById("reg-minori-ok-gdr")?.checked, ...regDatiIscrizione() };
  if (typeof UUID !== "undefined" && UUID && String(UUID).trim()) {
  payloadReg.uuid = String(UUID).trim();
  }
@@ -6164,7 +6353,6 @@ function renderUtente(r) {
  if (Array.isArray(r.fasceEta)) {
  applyFasceEtaConfig(r.fasceEta);
  }
- console.log("[renderUtente] ok, prenotazioni:", (r.prenotazioni || []).length, "timeline:", (r.timeline || []).length);
  const prenotazioniAttive = (r.prenotazioni || []).filter(p => !isDataPassata(p.eventData));
  const prenotazioniPassate = (r.prenotazioni || []).filter(p => isDataPassata(p.eventData));
  datiUtente = {
@@ -8375,6 +8563,26 @@ function segnalaErroreOrgClient(contesto, datiInseriti, log, messaggioErrore) {
  google.script.run.withFailureHandler(() => {}).segnalaErroreOrg(contesto, dati, log || "Errore lato client.", messaggioErrore || "Errore sconosciuto.");
 }
 
+function _otpLoginValore(prefix) { return String(document.getElementById(prefix + "-otp")?.value || "").trim(); }
+function _mostraOtpLogin(prefix, msg) {
+ document.getElementById(prefix + "-otp-wrap")?.classList.remove("hidden");
+ const m = document.getElementById(prefix + "-otp-msg");
+ if (m) m.textContent = msg || "Inserisci il codice inviato via email all'organizzazione.";
+}
+function _nascondiOtpLogin(prefix) {
+ document.getElementById(prefix + "-otp-wrap")?.classList.add("hidden");
+ const i = document.getElementById(prefix + "-otp");
+ if (i) i.value = "";
+}
+function richiediOtpLogin(prefix) {
+ const m = document.getElementById(prefix + "-otp-msg");
+ if (m) m.textContent = "Invio codice…";
+ google.script.run
+ .withSuccessHandler(r => { if (m) m.textContent = r?.messaggio || r?.errore || "Richiesta non riuscita."; })
+ .withFailureHandler(() => { if (m) m.textContent = "Errore di connessione. Riprova."; })
+ .richiediOtpOrg();
+}
+
 async function verificaOrg() {
  const pwd = document.getElementById("org-pwd").value;
  const err = document.getElementById("org-err");
@@ -8389,7 +8597,13 @@ async function verificaOrg() {
  google.script.run
  .withSuccessHandler(res => {
  document.getElementById("org-pwd").disabled = false;
+ if (res && res.otpRichiesto) {
+ _mostraOtpLogin("org", res.errore);
+ err.textContent = "";
+ return;
+ }
  if (res && res.ok) {
+ _nascondiOtpLogin("org");
  ORG_HASH_CLIENT = h;
  hide("org-login");
  err.textContent = "";
@@ -8403,12 +8617,12 @@ async function verificaOrg() {
  document.getElementById("org-pwd").focus();
  }
  })
- .withFailureHandler(err => {
+ .withFailureHandler(e => {
  document.getElementById("org-pwd").disabled = false;
  err.textContent = "❌ Errore di connessione. Riprova.";
- segnalaErroreOrgClient("verificaPasswordOrg", null, "Verifica password: connessione/eccezione server fallita.", err.message || String(err));
+ segnalaErroreOrgClient("verificaPasswordOrg", null, "Verifica password: connessione/eccezione server fallita.", e.message || String(e));
  })
- .verificaPasswordOrg(h);
+ .verificaPasswordOrg(h, _otpLoginValore("org"));
 }
 
 function logoutOrg() {
@@ -8451,7 +8665,13 @@ async function verificaAccoglienza() {
  google.script.run
  .withSuccessHandler(res => {
  document.getElementById("acc-pwd").disabled = false;
+ if (res && res.otpRichiesto) {
+ _mostraOtpLogin("acc", res.errore);
+ err.textContent = "";
+ return;
+ }
  if (res && res.ok) {
+ _nascondiOtpLogin("acc");
  ACC_HASH_CLIENT = h;
  hide("accoglienza-login");
  show("accoglienza-main");
@@ -8466,7 +8686,7 @@ async function verificaAccoglienza() {
  document.getElementById("acc-pwd").disabled = false;
  err.textContent = "❌ Errore di connessione. Riprova.";
  })
- .verificaPasswordOrg(h);
+ .verificaPasswordOrg(h, _otpLoginValore("acc"));
 }
 
 function accLogout() {
