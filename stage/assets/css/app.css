@@ -7298,10 +7298,15 @@ header.header-org{
   }
 }
 
+body{
+  display:flex;
+  flex-direction:column;
+  min-height:100dvh;
+}
 .site-footer{
   position:relative;
   z-index:1;
-  margin-top:8px;
+  margin-top:auto;
   padding:16px 16px 22px;
   border-top:1px solid var(--vellum2);
   background:#efe2d0;
@@ -7347,6 +7352,18 @@ header.header-org{
 .site-footer-note{
   font-size:12px;
   color:var(--smoke);
+}
+/* Copre la riga bianca del sandbox in cima all'header. */
+#app-header::before{
+  content:"";
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  height:3px;
+  background:#4a2008;
+  opacity:1;
+  z-index:8;
 }
 
 /* Font self-hosted (Fontsource, SIL OFL): nessuna richiesta a Google. */
