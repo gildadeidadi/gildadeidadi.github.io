@@ -5410,9 +5410,11 @@ function caricaEventiReg() {
  chiudiAttesa();
  flash("reg-fa", "Il caricamento sta impiegando troppo. Ricarica la pagina.", "err");
  }, 20000);
- syncFasceEtaDaFoglio(() => {
+ // Fasce ed eventi in parallelo: il rendering aspetta entrambe, ma le chiamate non si mettono in fila.
+ const fascePronte = new Promise(resolve => syncFasceEtaDaFoglio(resolve));
+ (() => {
  gildaRun()
- .withSuccessHandler(ev => {
+ .withSuccessHandler(ev => fascePronte.then(() => {
  clearTimeout(attesa);
  chiuso = true;
  eventiReg = (ev || []).filter(e => !isDataPassata(e.data));
@@ -5442,7 +5444,7 @@ function caricaEventiReg() {
  const recuperaBar = document.getElementById("reg-recupera-bar");
  if (tornaBar && typeof UUID !== "undefined" && UUID) { tornaBar.classList.remove("hidden"); if (recuperaBar) recuperaBar.classList.add("hidden"); }
  else { if (tornaBar) tornaBar.classList.add("hidden"); if (recuperaBar) recuperaBar.classList.remove("hidden"); }
- })
+ }))
  .withFailureHandler(err => {
  clearTimeout(attesa);
  chiuso = true;
@@ -5451,7 +5453,7 @@ function caricaEventiReg() {
  flash("reg-fa","Impossibile caricare gli eventi." + dettaglio,"err");
  })
  .getEventiConSessioni();
- });
+ })();
 }
 
 function caricaUtente() {
