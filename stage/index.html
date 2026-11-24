@@ -2,20 +2,22 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#8B4513">
 <meta name="mobile-web-app-capable" content="yes">
-<title>Gilda dei Dadi</title>
-<link rel="icon" type="image/png" sizes="96x96" href="assets/img/logo-mark-96.png?v=v0.1.13">
-<link rel="apple-touch-icon" href="assets/img/logo-touch-192.png?v=v0.1.13">
-<link rel="preload" as="image" href="assets/img/dice-parchment.jpg?v=v0.1.13">
-<link rel="stylesheet" href="assets/css/app.css?v=v0.1.13">
-<script src="assets/js/config.js?v=v0.1.13" defer></script>
-<script src="assets/js/environment.js?v=v0.1.13" defer></script>
-<script src="assets/js/api-client.js?v=v0.1.13" defer></script>
-<script src="assets/js/bootstrap.js?v=v0.1.13" defer></script>
-<script src="assets/js/app.js?v=v0.1.13" defer></script>
-<script src="assets/js/session.js?v=v0.1.13" defer></script>
+<title>Prenotazioni · Gilda dei Dadi</title>
+<link rel="icon" type="image/png" sizes="96x96" href="assets/img/logo-mark-96.png">
+<link rel="apple-touch-icon" href="assets/img/logo-touch-192.png">
+<link rel="preload" as="image" href="assets/img/dice-parchment.jpg">
+<link rel="stylesheet" href="assets/css/app.css">
+<script src="assets/js/config.js" defer></script>
+<script src="assets/js/environment.js" defer></script>
+<script src="assets/js/api-client.js" defer></script>
+<script src="assets/js/bootstrap.js" defer></script>
+<script src="assets/js/app.js" defer></script>
+<script src="assets/js/session.js" defer></script>
 </head>
 <body>
 <!--
@@ -27,7 +29,7 @@
  <div class="h-inner">
  <div class="h-brand-row" id="h-brand-row" style="display:flex;justify-content:center">
  <a href="https://www.wakeupvanzago.it/gilda-dei-dadi" target="_blank" class="h-logo-wrap">
- <img id="h-logo" src="assets/img/logo-mark-192.png?v=v0.1.13" alt="Gilda dei Dadi">
+ <img id="h-logo" src="assets/img/logo-mark-192.png" alt="Gilda dei Dadi">
  <span class="h-org-name" data-org-name>Gilda dei Dadi</span>
  </a>
  </div>
@@ -36,7 +38,6 @@
  <button type="button" class="tab-btn org-macro-btn active" data-macro="macro-stats" onclick="switchOrgMacro('macro-stats',this)" title="Statistiche">📊 Statistiche</button>
  <button type="button" class="tab-btn org-macro-btn" data-macro="macro-utenti" onclick="switchOrgMacro('macro-utenti',this)" title="Anagrafiche">👤 Anagrafiche</button>
  <button type="button" class="tab-btn org-macro-btn" data-macro="macro-eventi" onclick="switchOrgMacro('macro-eventi',this)" title="Eventi e Tavoli">📌 Eventi</button>
- <a href="?pagina=accoglienza" class="tab-btn org-macro-btn" title="Accoglienza" style="text-decoration:none">🚪 Accoglienza</a>
  <button type="button" class="tab-btn org-macro-btn" data-macro="macro-setup" onclick="switchOrgMacro('macro-setup',this)" title="Setup">🔧 Setup</button>
  </nav>
  
@@ -62,6 +63,10 @@
  <div id="h-master-actions" class="h-org-actions" aria-label="Azioni master">
  <button type="button" class="org-header-btn" onclick="apriMasterModificaInfoPopup()" title="Modifica info master">✏️ Info</button>
  <button type="button" class="org-header-btn" onclick="caricaAreaMaster()" title="Ricarica area master">↺ Aggiorna</button>
+ </div>
+ <div id="h-acc-actions" class="h-org-actions" aria-label="Azioni accoglienza">
+ <button type="button" class="org-header-btn" onclick="accRicarica()" title="Ricarica dati">↺ Aggiorna</button>
+ <button type="button" class="org-header-btn" onclick="accLogout()" title="Esci">⇦ Esci</button>
  </div>
  <div id="h-sede-actions" class="h-org-actions" aria-label="Azioni co-organizzatore">
  <button type="button" class="org-header-btn" onclick="tornaAccessoSede()" title="Torna all'elenco co-organizzatori">⇦ Elenco</button>
@@ -126,9 +131,25 @@
  <div class="login-box">
  <div class="login-head">
  <h2>🎲 Accesso Master</h2>
- <p>Ti invieremo un codice a 6 cifre all’email del tuo profilo master.</p>
+ <p>Accedi con la password del tuo profilo master.</p>
  </div>
  <div class="login-body">
+ <div class="field first" id="master-login-email-wrap">
+ <label class="lbl" for="master-login-email">Email del profilo master</label>
+ <input type="email" id="master-login-email" placeholder="nome@email.it" autocomplete="email" onkeydown="if(event.key==='Enter')verificaPasswordMasterLogin()">
+ </div>
+ <div class="field" style="margin-top:12px">
+ <label class="lbl" for="master-login-pwd">Password</label>
+ <div class="pwd-wrap"><input type="password" id="master-login-pwd" autocomplete="current-password" onkeydown="if(event.key==='Enter')verificaPasswordMasterLogin()"><button type="button" class="pwd-tog" onclick="togglePwd('master-login-pwd')">👁</button></div>
+ </div>
+ <div class="login-err" id="master-pwd-err" aria-live="polite"></div>
+ <div style="margin-top:14px">
+ <button type="button" class="btn btn-p btn-full btn-lg" onclick="verificaPasswordMasterLogin()">Accedi →</button>
+ </div>
+ <div style="margin-top:18px;text-align:center">
+ <button type="button" class="login-link-btn" aria-expanded="false" aria-controls="master-otp-box" onclick="toggleOtpMasterLogin(this)">Accedi con codice via email</button>
+ </div>
+ <div id="master-otp-box" class="hidden" style="margin-top:12px">
  <p class="hint" id="master-login-hint" style="margin-bottom:10px">Invia un codice all’email del tuo profilo.</p>
  <button type="button" class="btn btn-s btn-full" id="master-otp-send-btn" onclick="inviaOtpMasterLogin()">Invia codice</button>
  <div class="field" style="margin-top:14px">
@@ -137,8 +158,24 @@
  </div>
  <div class="login-err" id="master-login-err" aria-live="polite"></div>
  <div style="margin-top:14px">
- <button type="button" class="btn btn-p btn-full btn-lg" onclick="verificaOtpMasterLogin()">Accedi con codice →</button>
+ <button type="button" class="btn btn-s btn-full" onclick="verificaOtpMasterLogin()">Accedi con codice →</button>
  </div>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- ═══ CAMBIO PASSWORD MASTER ═══ -->
+ <div id="master-pwd-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiCambioPasswordMaster()" role="dialog" aria-modal="true" aria-labelledby="master-pwd-title">
+ <div class="dialog" onclick="event.stopPropagation()" style="max-width:420px">
+ <h3 id="master-pwd-title" style="margin:0 0 14px">🔑 Cambia password</h3>
+ <div class="field first"><label class="lbl" for="master-pwd-old">Password attuale</label><div class="pwd-wrap"><input type="password" id="master-pwd-old" autocomplete="current-password"><button type="button" class="pwd-tog" onclick="togglePwd('master-pwd-old')">👁</button></div></div>
+ <div class="field" style="margin-top:10px"><label class="lbl" for="master-pwd-new">Nuova password (min. 6 caratteri)</label><div class="pwd-wrap"><input type="password" id="master-pwd-new" autocomplete="new-password"><button type="button" class="pwd-tog" onclick="togglePwd('master-pwd-new')">👁</button></div></div>
+ <div class="field" style="margin-top:10px"><label class="lbl" for="master-pwd-new2">Ripeti nuova password</label><div class="pwd-wrap"><input type="password" id="master-pwd-new2" autocomplete="new-password" onkeydown="if(event.key==='Enter')salvaCambioPasswordMaster()"><button type="button" class="pwd-tog" onclick="togglePwd('master-pwd-new2')">👁</button></div></div>
+ <div class="login-err" id="master-pwd-chg-err" aria-live="polite"></div>
+ <div class="dlg-btns" style="margin-top:16px">
+ <button type="button" class="btn btn-o" onclick="chiudiCambioPasswordMaster()">Annulla</button>
+ <button type="button" class="btn btn-p" onclick="salvaCambioPasswordMaster()">Salva</button>
  </div>
  </div>
  </div>
@@ -148,19 +185,21 @@
  <div class="login-box sede-login-box">
  <div class="login-head">
  <h2>🤝 Accesso Co-organizzatore</h2>
- <p id="sede-login-head-sub">Seleziona il co-organizzatore per gestire eventi e iscrizioni</p>
+ <p id="sede-login-head-sub">Inserisci l'email del co-organizzatore per continuare.</p>
  </div>
  <div class="login-body">
  <div id="sede-login-pick">
  <div class="field first">
- <label class="lbl" for="sede-login-q">Cerca co-organizzatore</label>
- <input type="search" id="sede-login-q" placeholder="Nome o indirizzo…" oninput="renderSedeLoginList()" autocomplete="off">
+ <label class="lbl" for="sede-login-email">Email</label>
+ <input type="email" id="sede-login-email" placeholder="nome@email.it" autocomplete="email" onkeydown="if(event.key==='Enter')verificaEmailSedeLogin()">
  </div>
  <div class="login-err" id="sede-login-err"></div>
- <div id="sede-login-list" class="sede-login-list" aria-live="polite"></div>
+ <div style="margin-top:14px">
+ <button type="button" class="btn btn-p btn-full btn-lg" onclick="verificaEmailSedeLogin()">Verifica email →</button>
+ </div>
  </div>
  <div id="sede-login-auth" class="hidden">
- <button type="button" class="btn btn-o btn-sm" style="margin-bottom:12px" onclick="tornaElencoSediLogin()">← Elenco co-organizzatori</button>
+ <button type="button" class="btn btn-o btn-sm" style="margin-bottom:12px" onclick="tornaElencoSediLogin()">← Cambia email</button>
  <div id="sede-auth-nome" class="sede-auth-nome"></div>
  <div id="sede-auth-meta" class="sede-auth-meta"></div>
  <div class="sede-auth-tabs" role="tablist">
@@ -228,16 +267,6 @@
  <!-- ═══ MAIN ACCOGLIENZA (mappa eventi standalone) ═══ -->
  <div id="accoglienza-main" class="hidden">
  <div id="acc-fa"></div>
- <div id="acc-header-bar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
- <div>
- <h2 style="margin:0;font-family:var(--font-d);font-size:20px">🚪 Accoglienza</h2>
- <p style="margin:4px 0 0;font-size:13px;color:var(--smoke)">Check-in e gestione arrivi</p>
- </div>
- <div style="display:flex;gap:8px;align-items:center">
- <button type="button" class="btn btn-o btn-sm" onclick="accRicarica()" title="Ricarica dati">↺ Aggiorna</button>
- <button type="button" class="btn btn-o btn-sm" onclick="accLogout()" title="Esci">⇦ Esci</button>
- </div>
- </div>
  <div id="acc-mappa-container"></div>
  </div>
 
@@ -353,7 +382,6 @@
  </div>
  <div class="mappa-action-head-btns">
  <button type="button" class="btn btn-o btn-sm" onclick="caricaOrg()">↺ Aggiorna dati</button>
- <button type="button" class="btn btn-o btn-sm" onclick="apriMappaVistaAvanzata()" title="Gestione avanzata">⚙️</button>
  </div>
  </div>
  <p class="mappa-action-subtitle">Seleziona un evento dalla mappa per gestire sessioni e iscrizioni.</p>
@@ -383,6 +411,18 @@
  <div id="mappa-eventi-grid-passati" class="mappa-ev-grid"></div>
  </div>
  <div class="mappa-legend" aria-hidden="true"><span><span class="dot"></span> Barra = posti occupati / totali</span><span><span class="dot dot-att"></span> Attesa = in lista d'attesa</span></div>
+ <div class="card" style="margin-top:18px;box-shadow:none;border:1px solid var(--vellum)">
+ <div style="background:var(--parch2);border-bottom:1px solid var(--vellum);padding:10px 14px;display:flex;align-items:center;gap:8px">
+ <span style="font-family:var(--font-d);font-size:12px;color:var(--ember2);letter-spacing:.05em">FASCE D'ETÀ</span>
+ </div>
+ <div style="padding:14px">
+ <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+ <input type="text" id="org-fasce-eta-input" placeholder="Es. 51-65" style="min-width:180px;flex:1">
+ <button class="btn btn-o btn-sm" type="button" onclick="aggiungiFasciaEtaOrg()">➕ Aggiungi fascia</button>
+ </div>
+ <div id="org-fasce-eta-list" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+ </div>
+ </div>
  </div>
 
  <!-- STEP 2: dettaglio evento + contesto -->
@@ -631,15 +671,16 @@
  </div>
  <div id="masters-cnt" class="org-tbl-count"></div>
  <div class="org-list-toolbar-actions">
- <button type="button" class="btn btn-s btn-sm" onclick="toggleOrgDisclose('org-master-form', true)">➕ Nuovo master</button>
+ <button type="button" class="btn btn-s btn-sm" onclick="orgNuovoMasterForm()">➕ Nuovo master</button>
  </div>
  </div>
  <div id="org-master-form" class="org-disclose" data-focus="#org-master-nome">
  <button type="button" class="org-disclose-toggle" onclick="toggleOrgDisclose('org-master-form')" aria-expanded="false">
- <span>Nuovo master</span>
+ <span id="org-master-form-title">Nuovo master</span>
  <span class="org-disclose-chevron" aria-hidden="true">▾</span>
  </button>
  <div class="org-disclose-body">
+ <input type="hidden" id="org-master-id" value="">
  <div class="row2">
  <div class="field first">
  <label class="lbl" for="org-master-nome">Nome *</label>
@@ -742,6 +783,13 @@
  <span>CC email su <strong>iscrizione</strong>, <strong>modifica</strong> e <strong>cancellazione</strong> (richiede email)</span>
  </label>
  </div>
+ <div class="field" style="margin-top:4px">
+ <label class="lbl" for="org-sede-accesso">Permessi</label>
+ <select id="org-sede-accesso">
+ <option value="gestione">Gestione iscrizioni</option>
+ <option value="monitoraggio">Solo monitoraggio (sola lettura)</option>
+ </select>
+ </div>
  <div class="row2">
  <div class="field first" style="display:flex;align-items:center;gap:8px;padding-top:18px">
  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
@@ -776,27 +824,8 @@
  <!-- TAB: Gestione eventi -->
  <div id="t-eventi" class="tab-panel">
  <div class="card">
- <div class="card-head"><div class="card-head-icon">⚙️</div><h2>Gestione eventi (vista avanzata)</h2></div>
+ <div class="card-head"><div class="card-head-icon">📅</div><h2>Eventi</h2></div>
  <div class="card-body">
- <p class="org-tab-desc">
- Vista secondaria per operazioni avanzate: la gestione quotidiana e` centralizzata nella Mappa operativa eventi.
- </p>
- <div style="display:flex;gap:10px;margin-bottom:22px;flex-wrap:wrap">
- <button class="btn btn-s" onclick="apriNuovoEvento()">➕ Nuovo evento</button>
- <button class="btn btn-o btn-sm" onclick="caricaOrg()">↺ Aggiorna</button>
- </div>
- <div class="card" style="margin-bottom:16px;box-shadow:none;border:1px solid var(--vellum)">
- <div style="background:var(--parch2);border-bottom:1px solid var(--vellum);padding:10px 14px;display:flex;align-items:center;gap:8px">
- <span style="font-family:var(--font-d);font-size:12px;color:var(--ember2);letter-spacing:.05em">FASCE D'ETA</span>
- </div>
- <div style="padding:14px">
- <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
- <input type="text" id="org-fasce-eta-input" placeholder="Es. 51-65" style="min-width:180px;flex:1">
- <button class="btn btn-o btn-sm" type="button" onclick="aggiungiFasciaEtaOrg()">➕ Aggiungi fascia</button>
- </div>
- <div id="org-fasce-eta-list" style="display:flex;gap:8px;flex-wrap:wrap"></div>
- </div>
- </div>
  <div class="eventi-subtabs" style="display:flex;gap:6px;margin-bottom:18px">
  <button type="button" class="tab-btn eventi-subtab active" data-eventi-panel="eventi-panel-attivi" onclick="switchEventiSubtab('eventi-panel-attivi',this)">Eventi attivi</button>
  <button type="button" class="tab-btn eventi-subtab" data-eventi-panel="eventi-panel-inattivi" onclick="switchEventiSubtab('eventi-panel-inattivi',this)">Eventi inattivi</button>
@@ -810,6 +839,7 @@
  </div>
  <div id="eventi-panel-passati" class="eventi-panel hidden">
  <div id="eventi-list-passati"></div>
+ </div>
  </div>
  </div>
  </div>
@@ -833,8 +863,9 @@
  </div>
  <div class="row2">
  <div class="field field-ev-data">
- <label class="lbl">Data / periodo</label>
+ <label class="lbl">Data di riferimento</label>
  <input type="date" id="ev-data" min="2020-01-01" max="2030-12-31">
+ <p class="hint" style="margin:6px 0 0">Se le sessioni hanno date proprie, in lista conta la prima. Utile per eventi su più serate.</p>
  </div>
  <div class="field">
  <label class="lbl">Luogo</label>
@@ -848,11 +879,21 @@
  </div>
  </div>
  <div class="field">
- <label class="lbl">Co-organizzatore <span style="opacity:.65;font-weight:400">(facoltativo)</span></label>
- <select id="ev-sede-coorg" style="width:100%">
- <option value="">— Nessuno —</option>
- </select>
- <p class="hint" style="margin:6px 0 0">Se impostato, anche questo co-organizzatore vede l’evento nella sua area (oltre al luogo principale).</p>
+ <label class="lbl">Co-organizzatori <span style="opacity:.65;font-weight:400">(facoltativi)</span></label>
+ <!-- caselle riempite da populateEvSedeCoorgList -->
+ <div id="ev-sede-coorg-list"
+ style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow:auto"></div>
+ <p class="hint" style="margin:6px 0 0">Ogni co-organizzatore selezionato vede l’evento nella sua area (oltre al luogo principale).</p>
+ </div>
+ <div class="field">
+ <label class="lbl">Link prenotazione esterna <span style="opacity:.65;font-weight:400">(facoltativo)</span></label>
+ <input type="url" id="ev-link-esterno" placeholder="https://portale-della-fiera.example/prenota" inputmode="url" autocomplete="off">
+ <p class="hint" style="margin:6px 0 0">Per le fiere in cui i posti non li gestiamo noi. Se è compilato, dalla pagina pubblica si esce verso questo portale e qui non si raccolgono prenotazioni.</p>
+ </div>
+ <div class="field">
+ <label class="lbl">Locandina <span style="opacity:.65;font-weight:400">(facoltativo)</span></label>
+ <input type="text" id="ev-locandina" placeholder="Link Drive o URL https dell'immagine" autocomplete="off">
+ <p class="hint" style="margin:6px 0 0">Incolla il link del file su Drive (condiviso almeno in visualizzazione) oppure un URL https diretto. Compare sulla card pubblica e nel dettaglio.</p>
  </div>
  <div class="field">
  <label class="lbl">Descrizione</label>
@@ -1292,6 +1333,8 @@
  </div>
  </div>
 
+ <div id="reg-evento-info" class="hidden" style="margin:0 0 16px;padding:14px 18px;border:1px solid var(--vellum);border-radius:var(--radius-l);background:var(--parch2);color:var(--ink2)"></div>
+
  <!-- ── STEP 1: scegli evento, poi il tipo se l'evento è misto ── -->
  <div id="reg-s1">
  <div id="reg-s1-lista">
@@ -1307,17 +1350,17 @@
  <button class="btn btn-o btn-sm" type="button" onclick="regTornaStep1()">← Cambia evento</button>
  </span>
  </div>
- <p class="reg-step-desc">Questo evento ha più aree di gioco: GDR e GDT. Scegline un'area: per partecipare a entrambi fai due prenotazioni distinte.</p>
+ <p class="reg-step-desc">Questo evento ha due aree di gioco. Scegline una: per partecipare a entrambe servono due prenotazioni distinte, una per area.</p>
  <div class="reg-misto-grid">
  <button type="button" class="reg-misto-card" onclick="regScegliTipoMisto('gdr')">
  <span class="rec-pill ev-tipo ev-tipo-gdr">GDR</span>
- <span class="reg-misto-nome">Tavoli</span>
- <span class="reg-misto-sub">Prenota un tavolo di gioco di ruolo.</span>
+ <span class="reg-misto-nome">Tavoli Giochi di Ruolo</span>
+ <span class="reg-misto-sub">Prenota un tavolo per una sessione di gioco di ruolo.</span>
  </button>
  <button type="button" class="reg-misto-card" onclick="regScegliTipoMisto('gdt')">
  <span class="rec-pill ev-tipo ev-tipo-gdt">GDT</span>
- <span class="reg-misto-nome">Gioco libero</span>
- <span class="reg-misto-sub">Ingresso all'area di giochi da tavolo.</span>
+ <span class="reg-misto-nome">Gioco Libero ai Giochi da Tavolo</span>
+ <span class="reg-misto-sub">Ingresso libero all'area dei giochi da tavolo.</span>
  </button>
  </div>
  </div>
@@ -1402,7 +1445,6 @@
  </span>
  </div>
  <p class="reg-step-desc" id="reg-s3-desc">Inserisci i dati del prenotante, poi prosegui alla scelta dei tavoli.</p>
- <p class="hint" style="font-size:13px;margin:0 0 14px">Proseguendo confermi di aver letto l'<a href="https://www.wakeupvanzago.it/gilda-dei-dadi/informativa-privacy/" target="_blank" rel="noopener">informativa privacy</a>.</p>
 
  <div id="reg-gdt-sess-wrap" class="hidden" style="margin-bottom:16px">
  <div style="font-family:var(--font-m);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ash);margin-bottom:10px">🧭 Seleziona l'area</div>
@@ -1507,8 +1549,8 @@
  <input type="checkbox" id="reg-owner-partecipa" style="margin-top:3px" onchange="regTogglePrenotantePartecipa()">
  <span>
  <strong>Prenoto per altri e non partecipo personalmente</strong><br>
- <span style="font-size:12.5px;color:var(--ash);font-style:italic">
- Attivalo se il prenotante è un genitore/tutore e il partecipante reale è un'altra persona (es. figlio).
+ <span style="font-size:12.5px;color:var(--ash)">
+ Per un genitore che iscrive un figlio, o chi prenota al posto di un'altra persona.
  </span>
  </span>
  </label>
@@ -1546,7 +1588,7 @@
  <div class="card-head"><div class="card-head-icon">🔗</div><h2>Recupera il tuo link</h2></div>
  <div class="card-body">
  <p style="font-size:15px;color:var(--smoke);margin-bottom:12px;line-height:1.6">
- Inserisci l'email che hai usato per prenotare: ti invieremo il <strong>link personale</strong> per accedere alla tua area.
+ Inserisci l'email che hai usato per prenotare: puoi entrare subito con un codice, oppure ricevere il <strong>link personale</strong>.
  </p>
  <p style="font-size:13px;color:var(--ash);margin-bottom:18px;line-height:1.5">
  Dal link potrai vedere le prenotazioni, modificarle, cancellarle o aggiungere altre aree allo stesso evento.
@@ -1556,8 +1598,17 @@
  <input type="email" id="rec-email" placeholder="mario@email.it" onkeydown="if(event.key==='Enter')inviaRecupera()">
  </div>
  <div class="act-bar" style="margin-top:16px">
- <button class="btn btn-p" onclick="inviaRecupera()">📧 Invia link</button>
+ <button class="btn btn-p" onclick="inviaOtpUtente()">Entra con codice</button>
+ <button class="btn btn-o" onclick="inviaRecupera()">📧 Invia link</button>
  <button class="btn btn-o" onclick="hide('reg-recupera');show('reg-panel')">← Torna al modulo</button>
+ </div>
+ <div id="rec-otp-wrap" class="hidden" style="margin-top:14px">
+ <p class="hint" id="rec-otp-hint" style="margin-bottom:8px">Inserisci il codice ricevuto via email.</p>
+ <div class="field">
+ <label class="lbl" for="rec-otp">Codice ricevuto</label>
+ <input type="text" id="rec-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456" onkeydown="if(event.key==='Enter')verificaOtpUtenteLogin()">
+ </div>
+ <button type="button" class="btn btn-p" style="margin-top:10px" onclick="verificaOtpUtenteLogin()">Accedi →</button>
  </div>
  </div>
  </div>
@@ -1569,7 +1620,7 @@
  <div class="suc-panel">
  <span class="suc-icon">🎉</span>
  <h2>Prenotazione confermata!</h2>
- <p style="margin-top:10px">Ti abbiamo inviato un'<strong>email di conferma</strong> con il riepilogo<br>e un link personale per modificare la prenotazione.</p>
+ <p style="margin-top:10px">Ti arriva un'<strong>email di conferma</strong> con il riepilogo<br>e un link personale per modificare la prenotazione.</p>
  <p id="reg-ok-warning" class="hint hidden" style="margin-top:10px;color:var(--err);font-weight:600"></p>
  <div class="suc-note">
  <p style="font-size:13.5px;color:var(--smoke);font-style:italic">Non hai ricevuto l'email? Controlla la cartella spam oppure</p>
@@ -1735,6 +1786,7 @@
  <h2 id="m-nome" style="margin:0">Area Master</h2>
  <div id="m-nick" style="font-size:13px;font-weight:600;color:rgba(255,255,255,.88);line-height:1.25;letter-spacing:.04em"></div>
  </div>
+ <button type="button" class="btn btn-o btn-sm" style="margin-left:auto" onclick="apriCambioPasswordMaster()">🔑 Password</button>
  </div>
  <div class="card-body">
  <div class="master-profile-grid">
@@ -1820,7 +1872,10 @@
  </div>
  <div id="sede-sess-summary" class="sede-sess-summary" aria-live="polite"></div>
  <div class="coorg-tavoli-wrap">
+ <div class="coorg-tavoli-head">
  <div class="coorg-tavoli-label">Tavoli</div>
+ <button type="button" id="sede-btn-prenota" class="btn btn-s btn-sm hidden sede-write" onclick="apriSedePrenotazioneEvento()">➕ Nuova prenotazione</button>
+ </div>
  <div id="sede-tavoli-grid" class="mappa-tav-grid"></div>
  </div>
  </div>
@@ -1829,12 +1884,17 @@
 
  <div id="sede-iscrivi-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiSedeIscriviPopup()">
  <div class="dialog modifica-dialog" onclick="event.stopPropagation()">
- <h3 class="modifica-dialog-title">➕ Aggiungi iscritto</h3>
+ <h3 class="modifica-dialog-title" id="s-isc-title">➕ Aggiungi iscritto</h3>
  <div class="modifica-content">
  <input type="hidden" id="s-isc-event-id">
  <input type="hidden" id="s-isc-sessione-id">
  <input type="hidden" id="s-isc-tavolo-id">
+ <input type="hidden" id="s-isc-mode" value="tavolo">
  <div id="s-isc-ctx" class="hint" style="margin-bottom:10px"></div>
+ <div id="s-isc-pick" class="hidden" style="margin-bottom:12px">
+ <p class="hint" style="margin:0 0 8px">Scegli uno o più tavoli (anche su sessioni diverse): è una prenotazione completa sull’evento.</p>
+ <div id="s-isc-pick-list" class="sede-isc-pick-list"></div>
+ </div>
  <div class="field first">
  <label class="lbl" for="s-isc-nome">Nome *</label>
  <input type="text" id="s-isc-nome" autocomplete="name">
@@ -1866,7 +1926,7 @@
  </div>
  <footer class="modifica-dialog-footer">
  <button type="button" class="btn btn-o btn-sm" onclick="chiudiSedeIscriviPopup()">Annulla</button>
- <button type="button" class="btn btn-s btn-sm" onclick="confermaSedeIscrivi()">Salva iscrizione</button>
+ <button type="button" class="btn btn-s btn-sm" id="s-isc-submit" onclick="confermaSedeIscrivi()">Salva iscrizione</button>
  </footer>
  </div>
  </div>
@@ -1909,6 +1969,31 @@
  </svg>
  </div>
  <p id="action-overlay-msg" style="margin:0;font-style:italic;color:var(--smoke)">Salvataggio in corso…</p>
+ </div>
+ </div>
+
+ <!-- OVERLAY PASSWORD CO-ORGANIZZATORE -->
+ <div id="sede-pwd-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiSedePwdOverlay()" role="dialog" aria-modal="true" aria-labelledby="sede-pwd-title">
+ <div class="dialog modifica-dialog" onclick="event.stopPropagation()">
+ <h3 id="sede-pwd-title" class="modifica-dialog-title">🔑 Password co-organizzatore</h3>
+ <div class="modifica-content">
+ <p id="sede-pwd-sub" style="font-size:13.5px;color:var(--smoke);margin-bottom:12px"></p>
+ <label class="lbl" for="sede-pwd-new">Nuova password (min. 6 caratteri)</label>
+ <div class="pwd-wrap">
+ <input type="password" id="sede-pwd-new" autocomplete="new-password" placeholder="••••••••••" onkeydown="if(event.key==='Enter')document.getElementById('sede-pwd-confirm').focus()">
+ <button class="pwd-tog" onclick="togglePwd('sede-pwd-new')" type="button" aria-label="Mostra password">👁</button>
+ </div>
+ <label class="lbl" for="sede-pwd-confirm" style="margin-top:10px">Ripeti password</label>
+ <div class="pwd-wrap">
+ <input type="password" id="sede-pwd-confirm" autocomplete="new-password" placeholder="••••••••••" onkeydown="if(event.key==='Enter')salvaSedePwdOverlay()">
+ <button class="pwd-tog" onclick="togglePwd('sede-pwd-confirm')" type="button" aria-label="Mostra password">👁</button>
+ </div>
+ <p id="sede-pwd-err" class="hint" role="alert" style="color:#b71c1c;margin-top:8px;min-height:1em"></p>
+ </div>
+ <footer class="modifica-dialog-footer">
+ <button type="button" class="btn btn-o btn-sm" onclick="chiudiSedePwdOverlay()">✕ Annulla</button>
+ <button type="button" class="btn btn-s btn-sm" id="sede-pwd-save" onclick="salvaSedePwdOverlay()">🔑 Salva password</button>
+ </footer>
  </div>
  </div>
 
@@ -2632,6 +2717,22 @@
  </div>
  </div>
 
+ <div id="uscita-portale-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiUscitaPortale()">
+ <div class="dialog" onclick="event.stopPropagation()" style="max-width:440px">
+ <div class="card-head">
+ <div class="card-head-icon">↗</div>
+ <h2>Stai uscendo da Gilda dei Dadi</h2>
+ </div>
+ <div class="card-body">
+ <p style="margin:0 0 16px;line-height:1.5">Questa prenotazione non la gestiamo noi. I posti sono sul portale di chi organizza la fiera: da qui si apre quel sito.</p>
+ <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+ <button type="button" class="btn btn-o" onclick="chiudiUscitaPortale()">Resta qui</button>
+ <button type="button" class="btn btn-p" onclick="confermaUscitaPortale()">Vai al portale</button>
+ </div>
+ </div>
+ </div>
+ </div>
+
  <!-- OVERLAY DETTAGLIO EVENTO (registrazione) -->
  <div id="evento-detail-overlay" class="overlay hidden" onclick="if(event.target===this)chiudiDettaglioEvento()">
  <div class="dialog user-detail-dialog" onclick="event.stopPropagation()">
@@ -2662,7 +2763,7 @@
  <div class="site-footer-inner">
   <p class="site-footer-brand"><a href="https://www.wakeupvanzago.it/gilda-dei-dadi/" target="_blank" rel="noopener">Gilda dei Dadi</a></p>
   <p>Realtà ludica di <a href="https://www.wakeupvanzago.it/" target="_blank" rel="noopener">WakeUp Vanzago</a></p>
-  <p class="site-footer-address">Via del Lazzaretto 4<br>20043 Vanzago (MI)<br>C.F. 93547960158</p>
+  <p class="site-footer-address"><span>Via del Lazzaretto 4</span><span>20043 Vanzago (MI)</span><span>C.F. 93547960158</span></p>
   <nav class="site-footer-nav" aria-label="Informazioni">
    <a href="https://www.wakeupvanzago.it/gilda-dei-dadi/informativa-privacy/" target="_blank" rel="noopener">Informativa privacy</a>
    <a href="mailto:lagildadeidadi@gmail.com">Per info: lagildadeidadi@gmail.com</a>

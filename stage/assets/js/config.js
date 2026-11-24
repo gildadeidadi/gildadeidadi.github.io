@@ -38,9 +38,11 @@
     uuid: get("uuid"),
     mode: mode,
     pagina: pagina,
+    otp: get("otp") || get("codice"),
     masterToken: get("masterToken") || get("mt"),
     masterId: get("masterId") || get("mid"),
-    sedeId: get("sedeId") || get("sid"),
+    sedeId: get("sedeId") || get("sid") || get("sede") ||
+      ((pagina === "partner" || pagina === "sede") ? get("uuid") : ""),
     inviteToken: get("token") || get("invite"),
     buildId: "",
     orgNome: "Gilda dei Dadi",
@@ -52,7 +54,7 @@
     feedbackParams: { evento: get("evento"), sessione: get("sessione") },
     // Endpoint del backend. Vuoto = stesso origin, path /api/run.
     apiUrl: "",
-    // "fetch" | "jsonp" | "" (auto: jsonp se l'endpoint è cross-origin)
+    // "fetch" (default) | "gas" (pagina servita da Apps Script, google.script.run)
     transport: "",
     timeoutMs: 30000
   };

@@ -1,6 +1,67 @@
 /* Generato da dev/scripts/migrate-webapp.js — logica del portale. */
 /* Configurazione runtime: sostituisce i valori che prima erano template Apps Script. */
 const APP_CONFIG = window.GILDA_CONFIG || {};
+// Protezione rilascio: se il server è stato aggiornato, la pagina sospende le operazioni finché non viene ricaricata.
+(function guardiaRilascio() {
+ if (!APP_CONFIG.buildId) return;
+ function bloccaPerRilascio(titolo, testo) {
+ if (document.getElementById("rilascio-overlay")) return;
+ const ov = document.createElement("div");
+ ov.id = "rilascio-overlay";
+ ov.setAttribute("style", "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);font-family:system-ui,Segoe UI,Arial,sans-serif");
+ ov.innerHTML = '<div style="background:#fffdf9;border-radius:12px;padding:24px;max-width:420px;margin:16px;text-align:center;color:#3e2412"><p style="font-size:17px;font-weight:700;margin:0 0 12px">' + titolo + '</p><p style="margin:0 0 18px">' + testo + '</p><button type="button" style="padding:10px 18px;border:0;border-radius:8px;background:#8b4513;color:#fff;font-weight:700;cursor:pointer" onclick="gildaRicaricaPagina()">Ricarica</button></div>';
+ document.body.appendChild(ov);
+ }
+ // Il portale sta in un iframe di script.google.com dentro la pagina WordPress: il messaggio va alla pagina di primo livello (window.top), non al parent intermedio.
+ window.gildaRicaricaPagina = function () {
+ try { if (window.top && window.top !== window) window.top.postMessage({ type: "gilda-reload" }, "*"); } catch (_e) {}
+ setTimeout(() => location.reload(), 1500);
+ };
+ function controlla() {
+ try {
+ gildaRun()
+ .withSuccessHandler(b => {
+ if (b === "MANUTENZIONE") bloccaPerRilascio("Sito in manutenzione", "Stiamo aggiornando il sito: le operazioni sono sospese. Riprova tra poco.");
+ else if (b && b !== APP_CONFIG.buildId) bloccaPerRilascio("È stata pubblicata una nuova versione", "Ricarica la pagina per continuare. Nel frattempo le operazioni sono sospese.");
+ })
+ .withFailureHandler(() => {})
+ .getBuildServer();
+ } catch (_e) {}
+ }
+ setInterval(controlla, 60000);
+ document.addEventListener("visibilitychange", () => { if (!document.hidden) controlla(); });
+})();
+// Funzioni riservate all'organizzazione: su GAS passano da gildaInvocaOrg (verifica la sessione lato server).
+const GILDA_ORG_METODI = new Set(["getDatiOrganizzatore", "getDatiRevision", "getProfiloGiocatoreOrg", "salvaOpzioniConfig", "salvaEvento", "disattivaEvento", "attivaEvento", "aggiornaDatiPersona", "salvaHashPassword", "setupFogliConfig", "verificaStruttura", "eseguiMigrazioni", "inviaEmailTest", "getLogAzioni", "annullaListeAttesaPerTavolo", "inviaPromemoriaListaAttesa", "orgAggiungiIscrittoTavolo", "assegnaDaListaAttesa", "orgConfermaPresenza", "orgAggiungiSede", "orgImpostaPasswordSede", "orgImpostaPasswordMaster", "orgInviaInvitoMaster", "apriSessioneMasterDaOrg", "apriSessioneSedeDaOrg", "apriSessioneUtenteDaOrg", "orgImpostaAttivoSede", "orgAggiungiMaster", "orgAggiungiUtente", "orgAggiornaTavoloInfo", "orgGetAvventurePerMaster", "orgResolveTavoloAdventureMaster", "orgRicostruisciAvventureDaTavoliLegacy", "orgSetTavoloVisibilePrenotazioni", "salvaLuogoConfig", "getLuoghiConfig", "aggiungiSistemaGiocoConfig", "getSistemiGiocoConfig", "aggiungiFasciaEtaConfig", "getModuloFeedbackAdmin", "salvaModuloFeedbackAdmin", "creaModuloFeedbackEvento", "eliminaModuloFeedbackEvento", "inviaModuloFeedback", "inviaNotificaNuovoEvento", "getDettaglioAvvisoEvento", "inviaAvvisoEventoAnnullato", "orgAnteprimaNonPresentati", "orgInviaMailNonPresentati", "anteprimaAvvisoNuoviTavoli", "anteprimaAvvisoNuoviGiochi", "elencaAnomaliePrenotazioni", "risolviAnomaliaPrenotazione", "ripristinaPrenotazioniStoricheCancellate", "esportaCsvEvento", "eseguiBackupFogliManuale", "getStatoBackupFogli", "ricostruisciFoglioMastersJob", "ricostruisciFoglioUtentiJob", "getStatoEmailOrganizzatore", "getStatoTriggerSchedulati", "installaTriggerBackupGiornaliero", "installaTriggerCodaEmailOgni30Min", "processaCodaEmailSchedulato", "archiviaLogAzioniVecchi", "purgaLogFormAzioni", "healthCheckFogliSchedulato", "resetFogliSetup", "verificaAvventureGiaGiocatePerEmailPreview", "sincronizzaEventoWordPress"]);
+function gildaRun() {
+ const base = google.script.run;
+ if (!(window.gildaApi && window.gildaApi.transport && window.gildaApi.transport() === "gas")) return base;
+ // Il wrapper di api-client instrada i nomi verso apiEsegui: le funzioni riservate vanno al runner nativo.
+ const nativo = () => (typeof window.__gildaRunGet === "function" ? window.__gildaRunGet() : (window.__gildaRun || null));
+ const avvolgi = (st) => new Proxy({}, {
+ get(_t, p) {
+ if (p === "withSuccessHandler") return (f) => avvolgi(Object.assign({}, st, { ok: f }));
+ if (p === "withFailureHandler") return (f) => avvolgi(Object.assign({}, st, { fail: f }));
+ if (p === "withUserObject") return () => avvolgi(st);
+ if (typeof p !== "string") return undefined;
+ return (...a) => {
+ let r;
+ if (GILDA_ORG_METODI.has(p)) {
+ r = nativo();
+ if (!r) throw new Error("google.script.run non disponibile");
+ if (st.ok) r = r.withSuccessHandler(st.ok);
+ if (st.fail) r = r.withFailureHandler(st.fail);
+ return r.gildaInvocaOrg(window.gildaApi.getToken(), p, a);
+ }
+ r = base;
+ if (st.ok) r = r.withSuccessHandler(st.ok);
+ if (st.fail) r = r.withFailureHandler(st.fail);
+ return r[p](...a);
+ };
+ }
+ });
+ return avvolgi({});
+}
 const UUID = String(APP_CONFIG.uuid || "");
 const MODE = String(APP_CONFIG.mode || "");
 const PAGINA = String(APP_CONFIG.pagina || "");
@@ -42,7 +103,7 @@ function syncFasceEtaDaFoglio(onDone) {
  done();
  return;
  }
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  applyFasceEtaConfig(Array.isArray(res?.fasceEta) ? res.fasceEta : []);
  done();
@@ -189,10 +250,22 @@ let _inviteTokenCorrente = null;
 let _gildaMasterCredsApplied = false;
 
 function _buildPublicUtenteUrl(uuid) {
- const u = String(uuid || "").trim();
- const base = String(WEBAPP_URL_UTENTE || "").trim() || (window.location.origin + window.location.pathname);
- if (!u) return base;
- return `${base}?uuid=${encodeURIComponent(u)}`;
+ const id = String(uuid || "").trim();
+ let baseRaw = String(WEBAPP_URL_UTENTE || "").trim();
+ if (!baseRaw) baseRaw = window.location.origin + window.location.pathname;
+ try {
+ const u = new URL(baseRaw, window.location.origin);
+ u.searchParams.delete("mode");
+ u.searchParams.delete("masterId");
+ u.searchParams.delete("sedeId");
+ u.searchParams.set("pagina", "utente");
+ if (id) u.searchParams.set("uuid", id);
+ else u.searchParams.delete("uuid");
+ return u.toString();
+ } catch (_e) {
+ const sep = baseRaw.indexOf("?") >= 0 ? "&" : "?";
+ return baseRaw + sep + "pagina=utente" + (id ? "&uuid=" + encodeURIComponent(id) : "");
+ }
 }
 
 /** URL pubblico area master: come utente ma su WEBAPP_URL_MASTER + ?uuid= (stesso nome parametro). */
@@ -211,9 +284,9 @@ function _buildUrlAreaMaster(masterId) {
  if (!id) return baseRaw;
  try {
  const u = new URL(baseRaw, window.location.origin);
- u.searchParams.delete("pagina");
  u.searchParams.delete("masterId");
  u.searchParams.set("uuid", id);
+ if (!/\/master$/i.test(u.pathname.replace(/\/+$/, ""))) u.searchParams.set("pagina", "master");
  return u.toString();
  } catch (_e) {
  const sep = baseRaw.includes("?") ? "&" : "?";
@@ -301,7 +374,7 @@ function salvaMasterInfoDaPopup() {
  const btn = document.getElementById("m-info-submit");
  if (btn) btn.disabled = true;
  beginActionOverlay("Salvataggio informazioni…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (btn) btn.disabled = false;
@@ -316,7 +389,7 @@ function salvaMasterInfoDaPopup() {
  .withFailureHandler(err => {
  endActionOverlay();
  if (btn) btn.disabled = false;
- flash("master-fa", "❌ " + (err.message || err), "err");
+ flash("master-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .masterAggiornaInfo(cred, payload);
 }
@@ -520,7 +593,7 @@ function inviteEseguiAccettazione(nome, confermaNomeUgualeEtichetta) {
  if (!tok || !(typeof google !== "undefined" && google.script && google.script.run)) return;
  setLdr("Conferma invito in corso…");
  show("loader");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  hide("loader");
  if (res && res.ok && res.uuid) {
@@ -531,7 +604,7 @@ function inviteEseguiAccettazione(nome, confermaNomeUgualeEtichetta) {
  })
  .withFailureHandler(err => {
  hide("loader");
- flash("reg-fa", "❌ " + (err.message || err), "err");
+ flash("reg-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .accettaInvitoPartecipante(tok, nome, "", confermaNomeUgualeEtichetta === true);
 }
@@ -547,7 +620,7 @@ function invitePassoRifiuta() {
  if (!tok || !(typeof google !== "undefined" && google.script && google.script.run)) return;
  setLdr("Invio risposta…");
  show("loader");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  hide("loader");
  if (res && res.ok) {
@@ -563,12 +636,12 @@ function invitePassoRifiuta() {
  </div>`;
  }
  } else {
- flash("reg-fa", "⚠️ " + (res?.errore || "Operazione non riuscita."), "err");
+ flash("reg-fa", "⚠️ " + (res?.errore || _erroreRispostaVuota()), "err");
  }
  })
  .withFailureHandler(err => {
  hide("loader");
- flash("reg-fa", "❌ " + (err.message || err), "err");
+ flash("reg-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .rifiutaInvitoPartecipante(tok);
  });
@@ -647,6 +720,13 @@ function _masterCredential() {
  let masterId = String(params.get("masterId") || params.get("master") || masterIdTemplate || "").trim();
  if (!masterId && paginaNorm === "master") {
  masterId = String(params.get("uuid") || UUID || "").trim();
+ }
+ // Accesso con email o password (senza uuid nel link): il master è quello della sessione salvata.
+ if (!masterId) {
+ try {
+ const o = JSON.parse(sessionStorage.getItem(MASTER_SESSION_KEY) || "null");
+ masterId = String(o?.masterId || "").trim().toLowerCase();
+ } catch (_e) {}
  }
  return {
  masterId,
@@ -918,7 +998,7 @@ function masterSalvaModificaAvventuraDaPopup() {
  const btn = document.getElementById("m-edit-submit");
  if (btn) btn.disabled = true;
  beginActionOverlay("Salvataggio avventura…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (btn) btn.disabled = false;
@@ -933,7 +1013,7 @@ function masterSalvaModificaAvventuraDaPopup() {
  .withFailureHandler(err => {
  endActionOverlay();
  if (btn) btn.disabled = false;
- flash("master-fa", "❌ " + (err.message || err), "err");
+ flash("master-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .masterAggiornaAvventura(cred, payload);
 }
@@ -947,7 +1027,7 @@ function masterEliminaAvventuraDaPopup() {
  }
  chiediConferma("Confermi eliminazione avventura? I tavoli collegati verranno scollegati dal master.", () => {
  beginActionOverlay("Eliminazione avventura…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (!res || !res.ok) {
@@ -960,7 +1040,7 @@ function masterEliminaAvventuraDaPopup() {
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("master-fa", "❌ " + (err.message || err), "err");
+ flash("master-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .masterEliminaAvventura(cred, { avventuraId });
  });
@@ -1115,7 +1195,8 @@ function _masterFormatCopartecipantiCompactHtml(partecipanti, ctx) {
  const list = Array.isArray(partecipanti) ? partecipanti : [];
  if (!list.length) return "";
  const rows = list.map(part => {
- const nome = escapeHtml(String(part.nomeCompleto || part.nome || "Partecipante").trim() || "Partecipante");
+ const nomeRaw = String(part.nomeCompleto || part.nome || "Partecipante").trim() || "Partecipante";
+ const nome = _nomeClickableHtml(nomeRaw, part.participantUuid || part.uuid, part.email);
  const st = part.storicoGiocatore;
  const known = _masterHaStoricoUtile(st) || !!String(part.email || "").trim() || !!String(part.participantUuid || "").trim();
  const stats = known
@@ -1132,8 +1213,9 @@ function _masterFormatCopartecipantiDetailHtml(partecipanti, ctx) {
  const list = Array.isArray(partecipanti) ? partecipanti : [];
  if (!list.length) return "";
  const items = list.map(part => {
- const nome = escapeHtml(String(part.nomeCompleto || part.nome || "Partecipante").trim() || "Partecipante");
+ const nomeRaw = String(part.nomeCompleto || part.nome || "Partecipante").trim() || "Partecipante";
  const email = String(part.email || "").trim();
+ const nome = _nomeClickableHtml(nomeRaw, part.participantUuid || part.uuid, email);
  const st = part.storicoGiocatore;
  const known = _masterHaStoricoUtile(st) || !!email || !!String(part.participantUuid || "").trim();
  const body = known
@@ -1157,13 +1239,13 @@ function _masterRenderPrenotazioniTavoloHtml(prenotazioni, compact, ctx) {
  }
  if (compact) {
  const rows = list.map(p => {
- const nome = escapeHtml(String(p.nome || "—").trim() || "—");
+ const nomeHtml = _nomeClickableHtml(p.nome || "—", p.uuid, p.email);
  const numP = Math.max(1, parseInt(p.numPersone || 1, 10) || 1);
  const posti = numP > 1 ? `<span class="master-pren-posti">${numP} posti</span>` : "";
  const coparts = _masterFormatCopartecipantiCompactHtml(p.partecipanti, avCtx);
  return `<div class="master-pren-row">
  <div class="master-pren-who">
- <span class="master-pren-name">${nome}</span>${posti}
+ <span class="master-pren-name">${nomeHtml}</span>${posti}
  ${_masterFormatStoricoCompactStatsHtml(p.storicoGiocatore, avCtx)}
  </div>
  ${coparts}
@@ -1191,7 +1273,7 @@ function _masterRenderPrenotazioniTavoloHtml(prenotazioni, compact, ctx) {
  <div class="mtav-persona-top">
  <div class="mtav-avatar">${card.iniziale}</div>
  <div class="mtav-pinfo">
- <div class="mtav-pnome">${escapeHtml(card.nome)}</div>
+ <div class="mtav-pnome-wrap">${card.nomeHtml || _nomeClickableHtml(card.nome, p.uuid, p.email)}</div>
  ${card.pinfoHtml}
  ${storicoHtml}
  ${copartsHtml}
@@ -1326,7 +1408,7 @@ function masterDisassociaImpegno(rowKey) {
  }
  chiediConferma("Confermi la disassociazione dell'avventura da questo tavolo?", () => {
  beginActionOverlay("Disassociazione in corso…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (!res || !res.ok) {
@@ -1338,7 +1420,7 @@ function masterDisassociaImpegno(rowKey) {
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("master-fa", "❌ " + (err.message || err), "err");
+ flash("master-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .masterDisassociaAvventuraDaTavolo(cred, { avventuraId, tavoloId });
  });
@@ -1484,7 +1566,7 @@ function confermaMasterPrendiTavolo() {
  const btn = document.getElementById("m-prendi-submit");
  if (btn) btn.disabled = true;
  beginActionOverlay("Assegnazione tavolo in corso…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (btn) btn.disabled = false;
@@ -1499,7 +1581,7 @@ function confermaMasterPrendiTavolo() {
  .withFailureHandler(err => {
  endActionOverlay();
  if (btn) btn.disabled = false;
- flash("master-fa", "❌ " + (err.message || err), "err");
+ flash("master-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .masterPrendiTavoloConAvventura(cred, {
  eventId,
@@ -1587,8 +1669,8 @@ function _setSedeAccessHeader() {
  const masterTabs = document.getElementById("master-macro-tabs");
  const sedeTabs = document.getElementById("sede-macro-tabs");
  const app = document.getElementById("app");
- document.body.classList.add("mode-master");
- document.body.classList.remove("master-dashboard", "sede-dashboard", "org-dashboard");
+ document.body.classList.remove("mode-master", "master-dashboard", "sede-dashboard", "org-dashboard");
+ document.body.classList.add("mode-org");
  if (header) header.classList.remove("header-org");
  if (brand) brand.style.justifyContent = "center";
  if (masterTabs) masterTabs.setAttribute("hidden", "");
@@ -1632,12 +1714,258 @@ function renderSedeLoginList() {
  }).join("");
 }
 
+/** Step 1: verifica email → schermata OTP/password (senza inviare ancora il codice). */
+function verificaEmailSedeLogin() {
+ const email = String(document.getElementById("sede-login-email")?.value || "").trim();
+ const errEl = document.getElementById("sede-login-err");
+ if (!email) {
+ if (errEl) errEl.textContent = "Inserisci l'email del co-organizzatore.";
+ return;
+ }
+ if (errEl) errEl.textContent = "";
+ beginActionOverlay("Verifica email…");
+ gildaRun()
+ .withSuccessHandler(info => {
+ endActionOverlay();
+ if (!info || !info.ok || !info.sedeId) {
+ if (errEl) errEl.textContent = info?.errore || "Nessun co-organizzatore con questa email.";
+ return;
+ }
+ window._sedeIdOverride = info.sedeId;
+ try {
+ const url = new URL(window.location.href);
+ url.searchParams.set("pagina", "partner");
+ url.searchParams.set("sedeId", info.sedeId);
+ url.searchParams.set("uuid", info.sedeId);
+ history.replaceState({}, "", url.pathname + url.search + url.hash);
+ } catch (_e) {}
+ _mostraAuthSedeUi(info);
+ if (info.hasEmail) document.getElementById("sede-otp-send-btn")?.focus();
+ else if (info.hasPassword) document.getElementById("sede-pwd")?.focus();
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ if (errEl) errEl.textContent = err?.message || String(err);
+ })
+ .getSedeAuthInfoPerEmail(email);
+}
+
+/** @deprecated alias: prima inviava OTP subito; ora solo verifica email. */
+function inviaOtpSedePerEmail() {
+ verificaEmailSedeLogin();
+}
+
+function _otpSessioneOk(uuid) {
+ try { return sessionStorage.getItem("gilda_otp_ok") === String(uuid || "").trim().toLowerCase(); }
+ catch (_e) { return false; }
+}
+function _segnaOtpSessioneOk(uuid) {
+ try { sessionStorage.setItem("gilda_otp_ok", String(uuid || "").trim().toLowerCase()); } catch (_e) {}
+}
+/** Link aperto dall'organizzatore (?st=): la sessione sostituisce OTP e codice email. */
+function _entraUtenteConSessioneOrg(id, st) {
+ beginActionOverlay("Apertura prenotazioni…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ _rimuoviStDaUrl();
+ if (res && res.ok) {
+ _segnaOtpSessioneOk(id);
+ setHSub("Gestisci la tua prenotazione");
+ caricaUtente();
+ return;
+ }
+ avviaAccessoDaLink(id);
+ })
+ .withFailureHandler(() => {
+ endActionOverlay();
+ _rimuoviStDaUrl();
+ avviaAccessoDaLink(id);
+ })
+ .verificaSessioneUtente(id, st);
+}
+
+function _rimuoviStDaUrl() {
+ try {
+ const u = new URL(window.location.href);
+ u.searchParams.delete("st");
+ history.replaceState({}, "", u.pathname + u.search + u.hash);
+ } catch (_e) {}
+}
+
+function avviaAccessoDaLink(uuid) {
+ const id = String(uuid || "").trim();
+ setAppTitle("Le mie prenotazioni");
+ const stOrg = String(new URLSearchParams(window.location.search).get("st") || "").trim();
+ if (stOrg && id) { _entraUtenteConSessioneOrg(id, stOrg); return; }
+ if (_otpSessioneOk(id)) {
+ setHSub("Gestisci la tua prenotazione");
+ caricaUtente();
+ return;
+ }
+ setHSub("Inserisci il codice inviato via email");
+ hide("loader");
+ show("reg-main");
+ hide("reg-panel");
+ show("reg-recupera");
+ document.getElementById("reg-recupera-bar")?.classList.add("hidden");
+ document.querySelector("#reg-recupera button[onclick*='reg-panel']")?.classList.add("hidden");
+ let otpLink = String((typeof APP_CONFIG !== "undefined" && APP_CONFIG.otp) || "").trim();
+ if (!otpLink) {
+ try { otpLink = String(new URL(window.location.href).searchParams.get("otp") || "").trim(); } catch (_e) {}
+ }
+ if (otpLink) {
+ beginActionOverlay("Verifica codice…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ try {
+ const u = new URL(window.location.href);
+ u.searchParams.delete("otp");
+ u.searchParams.delete("otpScad");
+ history.replaceState({}, "", u.pathname + u.search + u.hash);
+ } catch (_e) {}
+ if (res && res.ok && res.uuid) {
+ _segnaOtpSessioneOk(res.uuid);
+ hide("reg-recupera");
+ setHSub("Gestisci la tua prenotazione");
+ caricaUtente();
+ return;
+ }
+ flash("reg-fa", "Il codice nel link è scaduto. Te ne inviamo uno nuovo.", "info");
+ _inviaCodiceAccessoDaLink(id);
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ flash("reg-fa", "❌ " + _messaggioErroreServer(err), "err");
+ _inviaCodiceAccessoDaLink(id);
+ })
+ .verificaOtpDaLink(id, otpLink);
+ return;
+ }
+ _inviaCodiceAccessoDaLink(id);
+}
+function _inviaCodiceAccessoDaLink(id) {
+ beginActionOverlay("Invio codice…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (!res || !res.ok) {
+ flash("reg-fa", "⚠️ " + (res?.errore || "Invio codice fallito."), "err");
+ return;
+ }
+ const emailEl = document.getElementById("rec-email");
+ if (emailEl && res.email) emailEl.value = res.email;
+ if (res.otpDisattivato && res.uuid) {
+ _segnaOtpSessioneOk(res.uuid);
+ hide("reg-recupera");
+ setHSub("Gestisci la tua prenotazione");
+ caricaUtente();
+ return;
+ }
+ const wrap = document.getElementById("rec-otp-wrap");
+ if (wrap) wrap.classList.remove("hidden");
+ const hint = document.getElementById("rec-otp-hint");
+ if (hint) hint.textContent = res.messaggio || "Codice inviato.";
+ document.getElementById("rec-otp")?.focus();
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ flash("reg-fa", "❌ " + _messaggioErroreServer(err), "err");
+ })
+ .avviaOtpDaLinkUtente(id);
+}
+
+function inviaOtpUtente() {
+ const email = String(document.getElementById("rec-email")?.value || "").trim();
+ const hint = document.getElementById("rec-otp-hint");
+ if (!email) {
+ flash("reg-fa", "Inserisci l'email usata per prenotare.", "err");
+ return;
+ }
+ beginActionOverlay("Invio codice…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (!res || !res.ok) {
+ flash("reg-fa", "⚠️ " + (res?.errore || "Invio codice fallito."), "err");
+ return;
+ }
+ if (res.otpDisattivato && res.uuid) {
+ try {
+ const u = new URL(window.location.href);
+ u.searchParams.set("pagina", "utente");
+ u.searchParams.set("uuid", res.uuid);
+ u.searchParams.delete("mode");
+ window.location.replace(u.pathname + u.search + u.hash);
+ } catch (_e) {
+ window.location.href = _buildPublicUtenteUrl(res.uuid);
+ }
+ return;
+ }
+ const wrap = document.getElementById("rec-otp-wrap");
+ if (wrap) wrap.classList.remove("hidden");
+ if (hint) hint.textContent = res.messaggio || "Codice inviato.";
+ document.getElementById("rec-otp")?.focus();
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ flash("reg-fa", "❌ " + _messaggioErroreServer(err), "err");
+ })
+ .richiediOtpUtente(email);
+}
+
+function verificaOtpUtenteLogin() {
+ const email = String(document.getElementById("rec-email")?.value || "").trim();
+ const otp = String(document.getElementById("rec-otp")?.value || "").trim();
+ if (!otp) {
+ flash("reg-fa", "Inserisci il codice ricevuto via email.", "err");
+ return;
+ }
+ beginActionOverlay("Verifica codice…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (!res || !res.ok || !res.uuid) {
+ flash("reg-fa", "⚠️ " + (res?.errore || "Codice non valido."), "err");
+ return;
+ }
+ _segnaOtpSessioneOk(res.uuid);
+ const uuidOk = String(res.uuid).trim().toLowerCase();
+ const uuidPagina = String((typeof UUID !== "undefined" && UUID) || "").trim().toLowerCase();
+ let uuidUrl = "";
+ try { uuidUrl = String(new URL(window.location.href).searchParams.get("uuid") || "").trim().toLowerCase(); } catch (_e) {}
+ if (uuidPagina === uuidOk || uuidUrl === uuidOk) {
+ hide("reg-recupera");
+ hide("reg-panel");
+ setAppTitle("Le mie prenotazioni");
+ setHSub("Gestisci la tua prenotazione");
+ caricaUtente();
+ return;
+ }
+ try {
+ const u = new URL(window.location.href);
+ u.searchParams.set("pagina", "utente");
+ u.searchParams.set("uuid", res.uuid);
+ u.searchParams.delete("mode");
+ window.location.replace(u.pathname + u.search + u.hash);
+ } catch (_e) {
+ window.location.href = _buildPublicUtenteUrl(res.uuid);
+ }
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ flash("reg-fa", "❌ " + _messaggioErroreServer(err), "err");
+ })
+ .verificaOtpUtente({ email: email, otp: otp });
+}
+
 function tornaElencoSediLogin() {
  window._sedeAuthTarget = null;
  show("sede-login-pick");
  hide("sede-login-auth");
  const headSub = document.getElementById("sede-login-head-sub");
- if (headSub) headSub.textContent = "Seleziona il co-organizzatore per gestire eventi e iscrizioni";
+ if (headSub) headSub.textContent = "Inserisci l'email del co-organizzatore per continuare.";
  const errAuth = document.getElementById("sede-auth-err");
  if (errAuth) errAuth.textContent = "";
 }
@@ -1717,7 +2045,7 @@ function mostraAuthSede(sedeId) {
  const nomeEl = document.getElementById("sede-auth-nome");
  if (nomeEl) nomeEl.textContent = "Caricamento…";
  }
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (!res || !res.ok) {
  const errAuth = document.getElementById("sede-auth-err");
@@ -1746,7 +2074,7 @@ function inviaOtpSede() {
  const btn = document.getElementById("sede-otp-send-btn");
  if (btn) btn.disabled = true;
  if (errAuth) errAuth.textContent = "";
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) btn.disabled = false;
  if (!res || !res.ok) {
@@ -1792,7 +2120,7 @@ function verificaOtpSede() {
  return;
  }
  beginActionOverlay("Verifica codice…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (!res || !res.ok) {
@@ -1820,7 +2148,7 @@ async function verificaPasswordSede() {
  try {
  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pwd));
  const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (!res || !res.ok) {
@@ -1856,38 +2184,13 @@ function mostraAccessoSede() {
  hide("sede-login-auth");
  _setSedeAccessHeader();
  const headSub = document.getElementById("sede-login-head-sub");
- if (headSub) headSub.textContent = "Seleziona il co-organizzatore per gestire eventi e iscrizioni";
+ if (headSub) headSub.textContent = "Inserisci l'email del co-organizzatore per continuare.";
  const errEl = document.getElementById("sede-login-err");
  if (errEl) {
  errEl.textContent = "";
  delete errEl.dataset.sticky;
  }
- const listEl = document.getElementById("sede-login-list");
- if (listEl) listEl.innerHTML = `<div class="sede-login-empty">Caricamento co-organizzatori…</div>`;
- google.script.run
- .withSuccessHandler(res => {
- if (!res || !res.ok) {
- window._sedeLoginSedi = [];
- if (errEl) {
- errEl.textContent = res?.errore || "Impossibile caricare i co-organizzatori.";
- errEl.dataset.sticky = "1";
- }
- renderSedeLoginList();
- return;
- }
- window._sedeLoginSedi = Array.isArray(res.sedi) ? res.sedi : [];
- renderSedeLoginList();
- setTimeout(() => document.getElementById("sede-login-q")?.focus(), 120);
- })
- .withFailureHandler(err => {
- window._sedeLoginSedi = [];
- if (errEl) {
- errEl.textContent = err?.message || String(err) || "Errore di rete.";
- errEl.dataset.sticky = "1";
- }
- renderSedeLoginList();
- })
- .getSediAttivePubbliche();
+ setTimeout(() => document.getElementById("sede-login-email")?.focus(), 120);
 }
 
 function accediSede(sedeId) {
@@ -1951,7 +2254,7 @@ function caricaAreaSede() {
  setHSub("Gestisci gli eventi come co-organizzatore");
  setLdr("Caricamento area co-organizzatore…");
  show("loader");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  hide("loader");
  hide("master-main");
@@ -1967,7 +2270,7 @@ function caricaAreaSede() {
  if (errAuth) errAuth.textContent = msg;
  return;
  }
- flash("sede-fa", "⚠️ " + (res?.errore || "Errore caricamento area co-organizzatore."), "err");
+ flash("sede-fa", "⚠️ " + (res?.errore || _erroreRispostaVuota()), "err");
  return;
  }
  _applicaDatiSedeArea(res, { keepSelection: true });
@@ -1977,7 +2280,7 @@ function caricaAreaSede() {
  .withFailureHandler(err => {
  hide("loader");
  show("sede-main");
- flash("sede-fa", "❌ " + (err.message || err), "err");
+ flash("sede-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .getDatiSedeArea(cred);
 }
@@ -1985,6 +2288,9 @@ function caricaAreaSede() {
 function _applicaDatiSedeArea(res, opts) {
  if (!res || !res.ok) return;
  window._sedeDati = res;
+ const monitorOnly = !!res.sede?.monitorOnly;
+ document.body.classList.toggle("sede-monitor", monitorOnly);
+ setHSub(monitorOnly ? "Monitoraggio eventi (sola lettura)" : "Gestisci gli eventi come co-organizzatore");
  if (Array.isArray(res.fasceEta)) applyFasceEtaConfig(res.fasceEta);
  const s = res.sede || {};
  const nomeEl = document.getElementById("s-nome");
@@ -2001,7 +2307,7 @@ function _applicaDatiSedeArea(res, opts) {
  }
  const keepEv = opts && opts.keepSelection ? window._sedeEvSel : null;
  const keepSess = opts && opts.keepSelection ? window._sedeSessSel : null;
- _sedeRenderEventi(res.eventi || []);
+ _sedeRenderEventi(Array.isArray(res.eventi) ? res.eventi : []);
  if (keepEv && _sedeEventiList().some(e => String(e.eventId) === String(keepEv))) {
  sedeApriEvento(keepEv, keepSess || null);
  }
@@ -2015,15 +2321,6 @@ function _sedeNormKey(v) {
  return String(v || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function _sedeRuoloEvento(ev) {
- const sedeKey = _sedeNormKey(window._sedeDati?.sede?.nomeSede || "");
- if (!sedeKey || !ev) return "";
- const luogoKey = _sedeNormKey(ev.luogoNome || ev.luogo || "");
- const coorgKey = _sedeNormKey(ev.sedeCoorganizzatore || "");
- if (luogoKey && luogoKey === sedeKey) return "sede";
- if (coorgKey && coorgKey === sedeKey) return "coorg";
- return "";
-}
 
 function _sedeCountsForEvent(ev) {
  let pren = 0, pers = 0, occ = 0, max = 0, liberi = 0, pieni = 0;
@@ -2107,6 +2404,7 @@ function sedeChiudiEvento() {
  show("sede-lv1");
  hide("sede-step2");
  _sedeSetEventOpen(false);
+ _sedeSyncPrenotaBtn(null);
  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -2207,14 +2505,24 @@ function _sedeRenderSessSummary(sess) {
  <div class="sede-chip"><strong>${c.tavoli}</strong>tavoli</div>`;
 }
 
+function _sedeSyncPrenotaBtn(ev) {
+ const btn = document.getElementById("sede-btn-prenota");
+ if (!btn) return;
+ const can = !!(ev && !ev.passato && ev.attivo);
+ btn.classList.toggle("hidden", !can);
+ btn.disabled = !can;
+}
+
 function _sedeRenderTavoli(evId, sessId) {
  const grid = document.getElementById("sede-tavoli-grid");
  if (!grid) return;
  const ev = _sedeEventiList().find(e => String(e.eventId) === String(evId));
  if (!ev) {
  grid.innerHTML = "";
+ _sedeSyncPrenotaBtn(null);
  return;
  }
+ _sedeSyncPrenotaBtn(ev);
  const sess = (ev.sessioni || []).find(s => String(s.sessioneId) === String(sessId));
  _sedeRenderSessSummary(sess);
  const tavoli = Array.isArray(sess?.tavoli) ? sess.tavoli : [];
@@ -2238,13 +2546,19 @@ function _sedeRenderTavoli(evId, sessId) {
  const nome = String(p.nome || "—").trim() || "—";
  const iniziale = nome.charAt(0).toUpperCase();
  const email = String(p.email || "").trim();
+ const uuid = String(p.uuid || "").trim();
  const fascia = labelsFasciaCsv ? (labelsFasciaCsv(p.fasciaEta) || "") : String(p.fasciaEta || "");
  const detail = [email, fascia].filter(Boolean).map(escapeHtml).join(" · ");
+ const extraNum = numP > 1 ? ` <span style="color:var(--ash);font-weight:600">(+${numP - 1})</span>` : "";
+ const riga = parseInt(p.riga, 10) || 0;
+ const nomeHtml = riga
+ ? `<button type="button" class="mtav-pnome mtav-pnome-btn" data-evento="${escapeHtml(evId)}" data-riga="${riga}" data-email="${escapeHtml(email)}" onclick="event.stopPropagation();apriProfiloGiocatoreSedeDa(this)" title="Dettagli e azioni">${escapeHtml(nome)}</button>${extraNum}`
+ : `<span class="mtav-pnome">${escapeHtml(nome)}</span>${extraNum}`;
  return `<div class="mtav-persona">
  <div class="mtav-persona-top">
  <div class="mtav-avatar">${escapeHtml(iniziale)}</div>
  <div class="mtav-pinfo">
- <div class="mtav-pnome">${escapeHtml(nome)}${numP > 1 ? ` <span style="color:var(--ash);font-weight:600">(+${numP - 1})</span>` : ""}</div>
+ <div class="mtav-pnome-wrap">${nomeHtml}</div>
  ${detail ? `<div class="mtav-pdetail">${detail}</div>` : ""}
  </div>
  <div class="mtav-pnum">×${numP}</div>
@@ -2263,7 +2577,7 @@ function _sedeRenderTavoli(evId, sessId) {
  fasciaEtaMinima: t.fasciaEtaMinima || ""
  };
  const foot = (canMutate && lib > 0)
- ? `<div class="mtav-card-actions"><button type="button" class="btn btn-s btn-sm" onclick='event.stopPropagation();apriSedeIscriviPopup(${JSON.stringify(ctx)})'>➕ Aggiungi iscritto</button></div>`
+ ? `<div class="mtav-card-actions sede-write"><button type="button" class="btn btn-s btn-sm" onclick='event.stopPropagation();apriSedeIscriviPopup(${JSON.stringify(ctx)})'>➕ Aggiungi iscritto</button></div>`
  : (lib === 0
  ? `<div class="sede-mtav-foot">Nessun posto libero · non puoi aggiungere iscritti</div>`
  : (ev.passato ? `<div class="sede-mtav-foot">Evento passato</div>` : `<div class="sede-mtav-foot">Evento non attivo</div>`));
@@ -2282,35 +2596,113 @@ function _sedeRenderTavoli(evId, sessId) {
  }).join("");
 }
 
-function apriSedeIscriviPopup(ctx) {
- const c = ctx || {};
- window._sedeIscriviCtx = c;
+function _sedeFillFasciaSelect(fasce) {
+ const sel = document.getElementById("s-isc-fascia");
+ if (!sel) return;
+ const list = Array.isArray(fasce) && fasce.length ? fasce : (FASCE_ETA || []);
+ sel.innerHTML = [`<option value="">—</option>`].concat(list.map(f => {
+ const id = typeof f === "string" ? f : String(f.id || f.fasciaId || f.label || "");
+ const label = typeof f === "string" ? f : String(f.label || f.nome || id);
+ return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
+ })).join("");
+}
+
+function _sedeResetIscriviForm() {
  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? "" : String(v); };
- set("s-isc-event-id", c.eventId || "");
- set("s-isc-sessione-id", c.sessioneId || "");
- set("s-isc-tavolo-id", c.tavoloId || "");
  set("s-isc-nome", "");
  set("s-isc-email", "");
  set("s-isc-cell", "");
  set("s-isc-num", "1");
- const ctxEl = document.getElementById("s-isc-ctx");
- if (ctxEl) {
- ctxEl.textContent = [c.eventNome, c.sessioneNome, c.tavoloNome].filter(Boolean).join(" · ");
- }
- const sel = document.getElementById("s-isc-fascia");
- if (sel) {
- const fasce = Array.isArray(c.fasce) ? c.fasce : [];
- const opts = [`<option value="">—</option>`].concat(
- (fasce.length ? fasce : (FASCE_ETA || [])).map(f => {
- const id = typeof f === "string" ? f : String(f.id || f.fasciaId || f.label || "");
- const label = typeof f === "string" ? f : String(f.label || f.nome || id);
- return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
- })
- );
- sel.innerHTML = opts.join("");
- }
  const cb = document.getElementById("s-isc-email-send");
  if (cb) cb.checked = false;
+}
+
+function apriSedeIscriviPopup(ctx) {
+ if (document.body.classList.contains("sede-monitor")) { flash("sede-fa", "Accesso di sola consultazione.", "err"); return; }
+ const c = ctx || {};
+ window._sedeIscriviCtx = c;
+ const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? "" : String(v); };
+ set("s-isc-mode", "tavolo");
+ set("s-isc-event-id", c.eventId || "");
+ set("s-isc-sessione-id", c.sessioneId || "");
+ set("s-isc-tavolo-id", c.tavoloId || "");
+ _sedeResetIscriviForm();
+ const title = document.getElementById("s-isc-title");
+ if (title) title.textContent = "➕ Aggiungi iscritto";
+ const submit = document.getElementById("s-isc-submit");
+ if (submit) submit.textContent = "Salva iscrizione";
+ const pick = document.getElementById("s-isc-pick");
+ if (pick) pick.classList.add("hidden");
+ const ctxEl = document.getElementById("s-isc-ctx");
+ if (ctxEl) {
+ ctxEl.classList.remove("hidden");
+ ctxEl.textContent = [c.eventNome, c.sessioneNome, c.tavoloNome].filter(Boolean).join(" · ");
+ }
+ _sedeFillFasciaSelect(c.fasce);
+ show("sede-iscrivi-overlay");
+}
+
+/** Prenotazione sull'evento: scegli tavoli/sessioni + dati persona. */
+function apriSedePrenotazioneEvento() {
+ if (document.body.classList.contains("sede-monitor")) { flash("sede-fa", "Accesso di sola consultazione.", "err"); return; }
+ const evId = String(window._sedeEvSel || "").trim();
+ const ev = _sedeEventiList().find(e => String(e.eventId) === evId);
+ if (!ev) {
+ flash("sede-fa", "Apri un evento prima di creare una prenotazione.", "err");
+ return;
+ }
+ if (ev.passato || !ev.attivo) {
+ flash("sede-fa", "Evento non disponibile per nuove prenotazioni.", "err");
+ return;
+ }
+ const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? "" : String(v); };
+ set("s-isc-mode", "evento");
+ set("s-isc-event-id", ev.eventId || "");
+ set("s-isc-sessione-id", "");
+ set("s-isc-tavolo-id", "");
+ _sedeResetIscriviForm();
+ window._sedeIscriviCtx = { eventId: ev.eventId, eventNome: ev.nome, mode: "evento" };
+ const title = document.getElementById("s-isc-title");
+ if (title) title.textContent = "➕ Nuova prenotazione";
+ const submit = document.getElementById("s-isc-submit");
+ if (submit) submit.textContent = "Salva prenotazione";
+ const ctxEl = document.getElementById("s-isc-ctx");
+ if (ctxEl) {
+ ctxEl.classList.remove("hidden");
+ ctxEl.textContent = String(ev.nome || ev.eventId || "");
+ }
+ const pick = document.getElementById("s-isc-pick");
+ const list = document.getElementById("s-isc-pick-list");
+ if (pick) pick.classList.remove("hidden");
+ if (list) {
+ const blocks = (ev.sessioni || []).map(sess => {
+ const tavoli = (Array.isArray(sess.tavoli) ? sess.tavoli : []).filter(t => {
+ const max = Math.max(0, parseInt(t.max || 0, 10) || 0);
+ const occ = Math.max(0, parseInt(t.occupati || 0, 10) || 0);
+ return max <= 0 || occ < max;
+ });
+ if (!tavoli.length) return "";
+ const items = tavoli.map(t => {
+ const max = Math.max(0, parseInt(t.max || 0, 10) || 0);
+ const occ = Math.max(0, parseInt(t.occupati || 0, 10) || 0);
+ const lib = max > 0 ? Math.max(0, max - occ) : null;
+ const meta = lib == null ? `${occ} iscritti` : `${lib} liberi · ${occ}/${max}`;
+ return `<label class="sede-isc-pick-item">
+ <input type="checkbox" class="s-isc-slot" data-sess="${escapeHtml(String(sess.sessioneId || ""))}" data-tavolo="${escapeHtml(String(t.id || ""))}">
+ <span><strong>${escapeHtml(t.gioco || t.id || "Tavolo")}</strong>
+ <span class="sede-isc-pick-meta"> · ${escapeHtml(meta)}</span></span>
+ </label>`;
+ }).join("");
+ return `<div class="sede-isc-pick-sess">
+ <div class="sede-isc-pick-sess-title">${escapeHtml(sess.nome || sess.sessioneId || "Sessione")}${sess.orario ? ` · ${escapeHtml(sess.orario)}` : ""}</div>
+ ${items}
+ </div>`;
+ }).filter(Boolean);
+ list.innerHTML = blocks.length
+ ? blocks.join("")
+ : `<div class="hint">Nessun tavolo con posti liberi in questo evento.</div>`;
+ }
+ _sedeFillFasciaSelect(FASCE_ETA || []);
  show("sede-iscrivi-overlay");
 }
 
@@ -2318,40 +2710,86 @@ function chiudiSedeIscriviPopup() {
  hide("sede-iscrivi-overlay");
 }
 
+function _sedeIscriviSlotsSelezionati() {
+ return Array.from(document.querySelectorAll("#s-isc-pick-list .s-isc-slot:checked")).map(el => ({
+ sessioneId: String(el.getAttribute("data-sess") || "").trim(),
+ idTavolo: String(el.getAttribute("data-tavolo") || "").trim()
+ })).filter(x => x.sessioneId && x.idTavolo);
+}
+
 function confermaSedeIscrivi() {
  const cred = _sedeCredential();
- const payload = {
- eventId: String(document.getElementById("s-isc-event-id")?.value || "").trim(),
- sessioneId: String(document.getElementById("s-isc-sessione-id")?.value || "").trim(),
- idTavolo: String(document.getElementById("s-isc-tavolo-id")?.value || "").trim(),
- nome: String(document.getElementById("s-isc-nome")?.value || "").trim(),
- email: String(document.getElementById("s-isc-email")?.value || "").trim(),
- cellulare: String(document.getElementById("s-isc-cell")?.value || "").trim(),
- numPersone: Math.max(1, parseInt(document.getElementById("s-isc-num")?.value || "1", 10) || 1),
- fasciaEta: String(document.getElementById("s-isc-fascia")?.value || "").trim(),
- inviaEmail: !!document.getElementById("s-isc-email-send")?.checked
- };
- if (!payload.nome) {
+ const mode = String(document.getElementById("s-isc-mode")?.value || "tavolo").trim();
+ const nome = String(document.getElementById("s-isc-nome")?.value || "").trim();
+ const email = String(document.getElementById("s-isc-email")?.value || "").trim();
+ const cellulare = String(document.getElementById("s-isc-cell")?.value || "").trim();
+ const numPersone = Math.max(1, parseInt(document.getElementById("s-isc-num")?.value || "1", 10) || 1);
+ const fasciaEta = String(document.getElementById("s-isc-fascia")?.value || "").trim();
+ const inviaEmail = !!document.getElementById("s-isc-email-send")?.checked;
+ const eventId = String(document.getElementById("s-isc-event-id")?.value || "").trim();
+ if (!nome) {
  flash("sede-fa", "Inserisci il nome.", "err");
  return;
  }
- beginActionOverlay("Registrazione iscrizione…");
- google.script.run
- .withSuccessHandler(res => {
+ let prenotazioni = [];
+ if (mode === "evento") {
+ prenotazioni = _sedeIscriviSlotsSelezionati().map(s => ({
+ sessioneId: s.sessioneId,
+ idTavolo: s.idTavolo,
+ numPersone,
+ fasciaEta
+ }));
+ if (!prenotazioni.length) {
+ flash("sede-fa", "Seleziona almeno un tavolo.", "err");
+ return;
+ }
+ } else {
+ prenotazioni = [{
+ sessioneId: String(document.getElementById("s-isc-sessione-id")?.value || "").trim(),
+ idTavolo: String(document.getElementById("s-isc-tavolo-id")?.value || "").trim(),
+ numPersone,
+ fasciaEta
+ }];
+ }
+ const payload = {
+ eventId,
+ nome,
+ email,
+ cellulare,
+ inviaEmail,
+ prenotazioni
+ };
+ beginActionOverlay(mode === "evento" ? "Registrazione prenotazione…" : "Registrazione iscrizione…");
+ const onOk = res => {
  endActionOverlay();
  if (!res || !res.ok) {
- flash("sede-fa", "⚠️ " + (res?.errore || "Impossibile registrare l'iscrizione."), "err");
+ flash("sede-fa", "⚠️ " + (res?.errore || "Impossibile registrare."), "err");
  return;
  }
  chiudiSedeIscriviPopup();
- flash("sede-fa", "✅ " + (res.messaggio || "Iscrizione registrata."), "ok");
+ flash("sede-fa", "✅ " + (res.messaggio || "Prenotazione registrata."), "ok");
  caricaAreaSede();
- })
- .withFailureHandler(err => {
+ };
+ const onErr = err => {
  endActionOverlay();
- flash("sede-fa", "❌ " + (err.message || err), "err");
- })
- .sedeAggiungiIscrittoTavolo(cred, payload);
+ flash("sede-fa", "❌ " + _messaggioErroreServer(err), "err");
+ };
+ const run = gildaRun().withSuccessHandler(onOk).withFailureHandler(onErr);
+ if (mode === "evento" || prenotazioni.length > 1) {
+ run.sedeRegistraPrenotazione(cred, payload);
+ } else {
+ run.sedeAggiungiIscrittoTavolo(cred, {
+ eventId,
+ sessioneId: prenotazioni[0].sessioneId,
+ idTavolo: prenotazioni[0].idTavolo,
+ nome,
+ email,
+ cellulare,
+ numPersone,
+ fasciaEta,
+ inviaEmail
+ });
+ }
 }
 
 function mostraLoginMaster(masterId) {
@@ -2365,14 +2803,129 @@ function mostraLoginMaster(masterId) {
  hide("user-main");
  setMasterDashboardHeader(false);
  setAppTitle("Area Master");
- setHSub("Accesso con codice email");
+ setHSub("Accesso con password o codice email");
  show("master-login");
+ const emailWrap = document.getElementById("master-login-email-wrap");
+ if (emailWrap) emailWrap.classList.toggle("hidden", !!window._masterLoginId);
  const hint = document.getElementById("master-login-hint");
- if (hint) hint.textContent = "Invia un codice a 6 cifre all’email del tuo profilo master.";
+ if (hint) hint.textContent = window._masterLoginId
+ ? "Invia un codice a 6 cifre all’email del tuo profilo master."
+ : "Inserisci l’email del profilo master: ti inviamo un codice a 6 cifre.";
+ if (window._masterLoginId) {
+ gildaRun()
+ .withSuccessHandler(res => {
+ if (res && res.ok && res.emailMasked && hint) hint.textContent = "Accesso per " + res.emailMasked + ". Inserisci la password oppure richiedi un codice.";
+ })
+ .withFailureHandler(() => {})
+ .getMasterAuthInfo(window._masterLoginId);
+ }
  const otpEl = document.getElementById("master-otp-code");
  if (otpEl) otpEl.value = "";
+ const pwdEl = document.getElementById("master-login-pwd");
+ if (pwdEl) { pwdEl.value = ""; pwdEl.focus(); }
  const errEl = document.getElementById("master-login-err");
  if (errEl) errEl.textContent = "";
+ const pwdErr = document.getElementById("master-pwd-err");
+ if (pwdErr) pwdErr.textContent = "";
+ setOtpMasterAperto(false);
+}
+
+/** Accesso con codice email: blocco secondario, chiuso di default. */
+function setOtpMasterAperto(aperto) {
+ const box = document.getElementById("master-otp-box");
+ if (box) box.classList.toggle("hidden", !aperto);
+ const btn = document.querySelector("#master-login .login-link-btn");
+ if (btn) {
+ btn.setAttribute("aria-expanded", aperto ? "true" : "false");
+ btn.textContent = aperto ? "Nascondi accesso con codice" : "Accedi con codice via email";
+ }
+}
+
+function toggleOtpMasterLogin() {
+ const box = document.getElementById("master-otp-box");
+ setOtpMasterAperto(!!box && box.classList.contains("hidden"));
+}
+
+/** Dopo un accesso riuscito (password o codice): salva la sessione e apre l'area master. */
+function _masterLoginRiuscito(masterId, sessionToken) {
+ _masterSessionSave(masterId, sessionToken);
+ hide("master-login");
+ setMasterDashboardHeader(true);
+ setAppTitle("Area Master");
+ setHSub("Gestisci le tue avventure");
+ show("loader");
+ caricaAreaMaster();
+}
+
+async function verificaPasswordMasterLogin() {
+ const id = String(window._masterLoginId || "").trim();
+ const email = String(document.getElementById("master-login-email")?.value || "").trim();
+ const pwdEl = document.getElementById("master-login-pwd");
+ const pwd = String(pwdEl?.value || "");
+ const errEl = document.getElementById("master-pwd-err");
+ if (!pwd) { if (errEl) errEl.textContent = "Inserisci la password."; return; }
+ if (!id && !email) { if (errEl) errEl.textContent = "Inserisci l'email del profilo master."; return; }
+ const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pwd));
+ const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+ if (pwdEl) pwdEl.value = "";
+ if (errEl) errEl.textContent = "";
+ beginActionOverlay("Accesso in corso…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (!res || !res.ok) {
+ if (errEl) errEl.textContent = res?.errore || "Accesso non riuscito.";
+ return;
+ }
+ _masterLoginRiuscito(res.masterId, res.sessionToken);
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ if (errEl) errEl.textContent = err?.message || String(err);
+ })
+ .verificaPasswordMaster({ masterId: id, email: email, passwordHash: hash });
+}
+
+function apriCambioPasswordMaster() {
+ ["master-pwd-old", "master-pwd-new", "master-pwd-new2"].forEach(i => { const el = document.getElementById(i); if (el) el.value = ""; });
+ const err = document.getElementById("master-pwd-chg-err");
+ if (err) err.textContent = "";
+ show("master-pwd-overlay");
+ document.getElementById("master-pwd-old")?.focus();
+}
+
+function chiudiCambioPasswordMaster() {
+ hide("master-pwd-overlay");
+}
+
+async function salvaCambioPasswordMaster() {
+ const vecchia = String(document.getElementById("master-pwd-old")?.value || "");
+ const nuova = String(document.getElementById("master-pwd-new")?.value || "");
+ const nuova2 = String(document.getElementById("master-pwd-new2")?.value || "");
+ const err = document.getElementById("master-pwd-chg-err");
+ if (!vecchia) { if (err) err.textContent = "Inserisci la password attuale."; return; }
+ if (nuova.length < 6) { if (err) err.textContent = "La nuova password deve avere almeno 6 caratteri."; return; }
+ if (nuova !== nuova2) { if (err) err.textContent = "Le due nuove password non coincidono."; return; }
+ const sha = async (t) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)))).map(b => b.toString(16).padStart(2, "0")).join("");
+ const attuale = await sha(vecchia);
+ const nuovaHash = await sha(nuova);
+ if (err) err.textContent = "";
+ beginActionOverlay("Salvataggio…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (!res || !res.ok) {
+ if (err) err.textContent = res?.errore || "Salvataggio non riuscito.";
+ return;
+ }
+ hide("master-pwd-overlay");
+ showNotifyPopup(res.messaggio || "Password aggiornata.", "ok");
+ })
+ .withFailureHandler(e => {
+ endActionOverlay();
+ if (err) err.textContent = e?.message || String(e);
+ })
+ .masterCambiaPassword(_masterCredential(), { attuale: attuale, nuova: nuovaHash });
 }
 
 function inviaOtpMasterLogin() {
@@ -2381,16 +2934,52 @@ function inviaOtpMasterLogin() {
  const hint = document.getElementById("master-login-hint");
  const btn = document.getElementById("master-otp-send-btn");
  if (!id) {
- if (errEl) errEl.textContent = "Master non selezionato.";
+ const email = String(document.getElementById("master-login-email")?.value || "").trim();
+ if (!email) {
+ if (errEl) errEl.textContent = "Inserisci l'email del profilo master.";
  return;
  }
  if (btn) btn.disabled = true;
  if (errEl) errEl.textContent = "";
- google.script.run
+ gildaRun()
+ .withSuccessHandler(res => {
+ if (btn) btn.disabled = false;
+ if (!res || !res.ok || !res.masterId) {
+ if (errEl) errEl.textContent = res?.errore || "Invio codice fallito.";
+ return;
+ }
+ window._masterLoginId = res.masterId;
+ if (res.otpDisattivato) {
+ const code = document.getElementById("master-otp-code");
+ if (code) code.value = "stage";
+ verificaOtpMasterLogin();
+ return;
+ }
+ const wrap = document.getElementById("master-login-email-wrap");
+ if (wrap) wrap.classList.add("hidden");
+ if (hint) hint.textContent = res.messaggio || "Codice inviato.";
+ document.getElementById("master-otp-code")?.focus();
+ })
+ .withFailureHandler(err => {
+ if (btn) btn.disabled = false;
+ if (errEl) errEl.textContent = err?.message || String(err);
+ })
+ .richiediOtpMasterPerEmail(email);
+ return;
+ }
+ if (btn) btn.disabled = true;
+ if (errEl) errEl.textContent = "";
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) btn.disabled = false;
  if (!res || !res.ok) {
  if (errEl) errEl.textContent = res?.errore || "Invio codice fallito.";
+ return;
+ }
+ if (res.otpDisattivato) {
+ const code = document.getElementById("master-otp-code");
+ if (code) code.value = "stage";
+ verificaOtpMasterLogin();
  return;
  }
  if (hint) hint.textContent = res.messaggio || "Codice inviato.";
@@ -2412,20 +3001,14 @@ function verificaOtpMasterLogin() {
  return;
  }
  beginActionOverlay("Verifica codice…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (!res || !res.ok) {
  if (errEl) errEl.textContent = res?.errore || "Codice non valido.";
  return;
  }
- _masterSessionSave(id, res.sessionToken);
- hide("master-login");
- setMasterDashboardHeader(true);
- setAppTitle("Area Master");
- setHSub("Gestisci le tue avventure");
- show("loader");
- caricaAreaMaster();
+ _masterLoginRiuscito(id, res.sessionToken);
  })
  .withFailureHandler(err => {
  endActionOverlay();
@@ -2438,10 +3021,7 @@ function caricaAreaMaster() {
  setMasterDashboardHeader(true);
  const cred = _masterCredential();
  if (!cred.masterId) {
- hide("loader");
- show("master-main");
- flash("master-fa", "Link master non valido: credenziali mancanti.", "err");
- requestAnimationFrame(syncOrgHeaderOffset);
+ mostraLoginMaster("");
  return;
  }
  if (!cred.sessionToken) {
@@ -2450,7 +3030,7 @@ function caricaAreaMaster() {
  }
  setLdr("Caricamento area master…");
  show("loader");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  hide("loader");
  show("master-main");
@@ -2462,7 +3042,7 @@ function caricaAreaMaster() {
  mostraLoginMaster(cred.masterId);
  return;
  }
- flash("master-fa", "⚠️ " + (res?.errore || "Errore caricamento area master."), "err");
+ flash("master-fa", "⚠️ " + (res?.errore || _erroreRispostaVuota()), "err");
  return;
  }
  if (Array.isArray(res.fasceEta)) {
@@ -2493,7 +3073,7 @@ function caricaAreaMaster() {
  .withFailureHandler(err => {
  hide("loader");
  show("master-main");
- flash("master-fa", "❌ " + (err.message || err), "err");
+ flash("master-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .getDatiMasterArea(cred);
 }
@@ -2516,7 +3096,7 @@ function salvaNuovaAvventuraDaMaster() {
  const btn = document.getElementById("m-new-submit");
  if (btn) btn.disabled = true;
  beginActionOverlay("Creazione avventura…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (btn) btn.disabled = false;
@@ -2546,7 +3126,7 @@ function salvaNuovaAvventuraDaMaster() {
  .withFailureHandler(err => {
  endActionOverlay();
  if (btn) btn.disabled = false;
- flash("master-fa", "❌ " + (err.message || err), "err");
+ flash("master-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .salvaNuovaAvventuraMaster(cred, payload);
 }
@@ -2569,7 +3149,7 @@ function avviaSchermataInvitoPartecipante(token) {
  }
  setLdr("Caricamento invito…");
  show("loader");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  hide("loader");
  if (!res || !res.ok) {
@@ -2594,13 +3174,14 @@ function avviaSchermataInvitoPartecipante(token) {
  _inviteTokenCorrente = null;
  show("reg-main");
  _inviteRipristinaVistaReg();
- flash("reg-fa", "❌ " + (err.message || err), "err");
+ flash("reg-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .getDettaglioInvitoPartecipante(t);
 }
 
 // ── INIT ─────────────────────────────────────
 window.addEventListener("DOMContentLoaded", () => {
+ try { initRegSwipe(); } catch (e) { console.error(e); }
  applyHeaderBackgroundFromConfig();
  updateMobileHeaderTopbar();
  // Due frame: misura header dopo layout (prenotazione/utente inclusi).
@@ -2611,6 +3192,14 @@ window.addEventListener("DOMContentLoaded", () => {
  // Watchdog: evita schermata bianca se qualcosa interrompe il bootstrap.
  setTimeout(ensureInitialViewVisible, 1200);
  if (String(PAGINA || "").toLowerCase().trim() === "feedback") { avviaModuloFeedback(); return; }
+ const paginaBoot = String(PAGINA || "").toLowerCase().trim();
+ const uuidBoot = String(new URLSearchParams(window.location.search).get("uuid") || "").trim();
+ if (paginaBoot === "utente" && uuidBoot && uuidBoot !== "undefined") {
+ setAppTitle("Le mie prenotazioni");
+ setHSub("Gestisci la tua prenotazione");
+ caricaUtente();
+ return;
+ }
  if (MODE === "org") {
  document.body.classList.add("mode-org");
  hide("loader"); show("org-login");
@@ -2620,7 +3209,7 @@ window.addEventListener("DOMContentLoaded", () => {
  setHSub("Pannello Organizzatore");
  // carica opzioni Config (es. priorità lista d'attesa) per prefilling UI
  if (typeof google !== "undefined" && google.script && google.script.run) {
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) {
  WAITLIST_PRIORITY_ENABLED = !!res.USE_WAITLIST_PRIORITY;
@@ -2669,13 +3258,23 @@ window.addEventListener("DOMContentLoaded", () => {
  const hasMasterCred = !!(masterIdFromUrl || masterIdTemplate
  || (paginaNorm === "master" && uuidFromUrlEarly));
  if (paginaNorm === "master" || hasMasterCred) {
+ const masterIdBoot = String(masterIdFromUrl || masterIdTemplate || (paginaNorm === "master" ? uuidFromUrlEarly : "") || "").trim();
+ const stMaster = String(params.get("st") || "").trim();
+ if (masterIdBoot && stMaster) {
+ _masterSessionSave(masterIdBoot, stMaster);
+ try {
+ params.delete("st");
+ const q = params.toString();
+ history.replaceState({}, "", window.location.pathname + (q ? "?" + q : "") + window.location.hash);
+ } catch (_e) {}
+ }
  setAppTitle("Area Master");
  setMasterDashboardHeader(true);
  setHSub("Gestisci le tue avventure");
  caricaAreaMaster();
  return;
  }
- const sedeIdFromUrl = String(params.get("sedeId") || params.get("sede") || "").trim();
+ const sedeIdFromUrl = String(params.get("sedeId") || params.get("sid") || params.get("sede") || "").trim();
  const sedeIdTemplate = (typeof SEDE_ID !== "undefined") ? SEDE_ID : "";
  const isPartnerPage = paginaNorm === "partner" || paginaNorm === "sede";
  const hasSedeCred = !!(sedeIdFromUrl || sedeIdTemplate || (isPartnerPage && uuidFromUrlEarly));
@@ -2683,17 +3282,55 @@ window.addEventListener("DOMContentLoaded", () => {
  setAppTitle("Area Co-organizzatore");
  if (hasSedeCred) {
  const sedeIdBoot = String(sedeIdFromUrl || sedeIdTemplate || uuidFromUrlEarly || "").trim();
- const sessBoot = _sedeSessionLoad();
- if (sessBoot && sessBoot.sessionToken &&
- String(sessBoot.sedeId || "").toLowerCase() === sedeIdBoot.toLowerCase()) {
- window._sedeSessionToken = sessBoot.sessionToken;
+ const stSede = String(params.get("st") || "").trim();
+ let otpSede = String((typeof APP_CONFIG !== "undefined" && APP_CONFIG.otp) || "").trim();
+ if (!otpSede) otpSede = String(params.get("otp") || params.get("codice") || "").trim();
+ const entraSedeConSessione = (token) => {
+ const t = String(token || "").trim();
+ if (!sedeIdBoot || !t) return false;
+ _sedeSessionSave(sedeIdBoot, t);
+ window._sedeSessionToken = t;
  window._sedeIdOverride = sedeIdBoot;
+ try {
+ params.delete("st");
+ params.delete("otp");
+ params.delete("codice");
+ const qSede = params.toString();
+ history.replaceState({}, "", window.location.pathname + (qSede ? "?" + qSede : "") + window.location.hash);
+ } catch (_e) {}
  setSedeDashboardHeader(true);
  setHSub("Gestisci gli eventi come co-organizzatore");
  caricaAreaSede();
- } else {
- mostraAuthSede(sedeIdBoot);
+ return true;
+ };
+ if (sedeIdBoot && stSede && entraSedeConSessione(stSede)) return;
+ const sessBoot = _sedeSessionLoad();
+ if (sessBoot && sessBoot.sessionToken &&
+ String(sessBoot.sedeId || "").toLowerCase() === sedeIdBoot.toLowerCase()) {
+ entraSedeConSessione(sessBoot.sessionToken);
+ return;
  }
+ // Bypass via OTP nel link: ?pagina=partner&sedeId=…&otp=123456
+ if (sedeIdBoot && otpSede) {
+ beginActionOverlay("Accesso co-organizzatore…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (res && res.ok && res.sessionToken && entraSedeConSessione(res.sessionToken)) return;
+ mostraAuthSede(sedeIdBoot);
+ const errAuth = document.getElementById("sede-auth-err");
+ if (errAuth) errAuth.textContent = String(res?.errore || "Codice non valido o scaduto.");
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ mostraAuthSede(sedeIdBoot);
+ const errAuth = document.getElementById("sede-auth-err");
+ if (errAuth) errAuth.textContent = String_messaggioErroreServer(err);
+ })
+ .verificaAccessoSede({ sedeId: sedeIdBoot, otp: otpSede });
+ return;
+ }
+ mostraAuthSede(sedeIdBoot);
  } else {
  mostraAccessoSede();
  }
@@ -2712,9 +3349,7 @@ window.addEventListener("DOMContentLoaded", () => {
  }
  const uuidFromUrl = uuidFromUrlEarly;
  if (uuidFromUrl && uuidFromUrl !== "undefined") {
- setAppTitle("Le mie prenotazioni");
- setHSub("Gestisci la tua prenotazione");
- caricaUtente();
+ avviaAccessoDaLink(uuidFromUrl);
  return;
  }
  const inviteTokenFromUrl = params.get("inviteToken");
@@ -2726,9 +3361,7 @@ window.addEventListener("DOMContentLoaded", () => {
  return;
  }
  if (UUID && UUID.trim() && UUID !== "undefined") {
- setAppTitle("Le mie prenotazioni");
- setHSub("Gestisci la tua prenotazione");
- caricaUtente();
+ avviaAccessoDaLink(UUID);
  return;
  }
  // Se viene aperta esplicitamente la pagina utente senza UUID,
@@ -2770,17 +3403,9 @@ window.addEventListener("scroll", () => {
 function updateMobileHeaderTopbar() {
  const header = document.getElementById("app-header");
  if (!header) return;
- const isMobile = window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
- if (!isMobile) {
- header.classList.remove("mobile-compact");
- document.body.classList.remove("mobile-topbar-on");
- syncOrgHeaderOffset();
- return;
- }
- const y = window.scrollY || window.pageYOffset || 0;
- const compact = y > 10;
- header.classList.toggle("mobile-compact", compact);
- document.body.classList.toggle("mobile-topbar-on", compact);
+ const isMobile = window.matchMedia && window.matchMedia("(max-width: 1100px)").matches;
+ header.classList.toggle("mobile-compact", !!isMobile);
+ document.body.classList.toggle("mobile-topbar-on", !!isMobile);
  syncOrgHeaderOffset();
 }
 
@@ -2804,13 +3429,13 @@ function avviaModuloFeedback() {
  }
  root.innerHTML = _feedbackMsg("Caricamento…", "");
  if (typeof google === "undefined" || !google.script || !google.script.run) {
- root.innerHTML = _feedbackMsg("Non disponibile", "Riprova più tardi.");
+ root.innerHTML = _feedbackMsg("Non disponibile", _erroreRispostaVuota());
  return;
  }
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (!res || !res.ok) {
- root.innerHTML = _feedbackMsg("Link non valido", (res && res.errore) || "Riprova più tardi.");
+ root.innerHTML = _feedbackMsg("Link non valido", (res && res.errore) || _erroreRispostaVuota());
  return;
  }
  FEEDBACK_STATO = Object.assign({}, res, { eventId: p.evento, sessioneId: p.sessione, uuid: UUID });
@@ -2821,7 +3446,7 @@ function avviaModuloFeedback() {
  _feedbackRenderForm(FEEDBACK_STATO);
  })
  .withFailureHandler(err => {
- root.innerHTML = _feedbackMsg("Errore", (err && err.message) || "Riprova più tardi.");
+ root.innerHTML = _feedbackMsg("Errore", _messaggioErroreServer(err));
  })
  .getModuloFeedbackContext(p.evento, p.sessione, UUID);
 }
@@ -2889,7 +3514,7 @@ function feedbackInvia() {
  errEl.textContent = msg || "Errore durante il salvataggio.";
  errEl.classList.remove("hidden");
  };
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) {
  document.getElementById("feedback-root").innerHTML = _feedbackMsg("Grazie!", res.messaggio || "Il tuo feedback è stato registrato.");
@@ -2912,7 +3537,7 @@ function _orgFeedbackBtnHtml(evId, sessId, tipo) {
 function orgInviaModuloFeedback(evId, sessId) {
  if (!(typeof google !== "undefined" && google.script && google.script.run)) return;
  beginActionOverlay("Invio del modulo feedback…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) flash("org-fa", "✅ " + res.messaggio, "ok");
@@ -2935,7 +3560,7 @@ function _modfbGoogleOk() {
 
 /** Carica le domande di uno scope; se provaEvento e l'evento non ha versione propria, ricade sul globale. */
 function _modfbCarica(scope, evId, tipo, provaEvento) {
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (!res || !res.ok) { endActionOverlay(); flash("org-fa", "⚠️ " + ((res && res.errore) || "Errore nel caricamento."), "err"); return; }
  if (provaEvento && !res.hasOverride) { _modfbCarica(tipo, evId, tipo, false); return; }
@@ -3047,7 +3672,7 @@ function modfbSalva() {
  const domande = _modfbLeggi();
  const btn = document.getElementById("modfb-save");
  btn.disabled = true;
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  btn.disabled = false;
  if (res && res.ok) {
@@ -3075,7 +3700,7 @@ function _modfbAzioneEvento(metodo) {
  const st = MODFB_STATO;
  if (!st || !_modfbGoogleOk()) return;
  beginActionOverlay("Aggiorno il modulo…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) {
  flash("org-fa", "✅ " + res.messaggio, "ok");
@@ -3273,7 +3898,7 @@ function renderLogAzioni() {
  </div></td></tr>`;
  if (cntEl) cntEl.textContent = "";
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (!res || !res.ok) {
  const why = res == null
@@ -3363,13 +3988,13 @@ function esportaLogAzioniCsv() {
 
 function archiviaLogVecchiDaUI() {
  if (!confirm("Archiviare le voci oltre il limite configurato su LogAzioniArchivio?")) return;
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) {
  alert(`Archiviate ${res.archived || 0} righe (rimosse ${res.deleted || 0}).`);
  renderLogAzioni();
  } else {
- alert(res?.errore || "Archiviazione non riuscita.");
+ alert(res?.errore || _erroreRispostaVuota());
  }
  })
  .withFailureHandler(err => alert(err?.message || String(err)))
@@ -3378,13 +4003,13 @@ function archiviaLogVecchiDaUI() {
 
 function purgaLogFormDaUI() {
  if (!confirm("Rimuovere dal log attivo tutte le voci del form (reg_form_*)? Verranno archiviate se LOG_ARCHIVE_ENABLED è attivo.")) return;
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) {
  alert(`Rimosse ${res.removed || 0} voci form (archiviate ${res.archived || 0}).`);
  renderLogAzioni();
  } else {
- alert(res?.errore || "Pulizia non riuscita.");
+ alert(res?.errore || _erroreRispostaVuota());
  }
  })
  .withFailureHandler(err => alert(err?.message || String(err)))
@@ -3394,6 +4019,11 @@ function purgaLogFormDaUI() {
 let _notifyPopupKeyHandler = null;
 
 const show = id => {
+ if (id === "reg-main" || id === "reg-panel" || id === "user-main" || id === "reg-ok" || id === "reg-recupera") {
+  hide("org-login");
+  document.body.classList.remove("mode-org");
+ }
+ if (id === "org-login") { hide("reg-main"); hide("user-main"); hide("reg-panel"); }
  document.getElementById(id)?.classList.remove("hidden");
  if (id === "modifica-overlay" || id === "nome-unifica-overlay") document.body.classList.add("overlay-modifica-open");
 };
@@ -3448,7 +4078,8 @@ function syncOrgHeaderOffset() {
  return;
  }
  pinOrgHeaderFlush();
- const h = Math.ceil(header.getBoundingClientRect().height || header.offsetHeight || 0);
+ const rect = header.getBoundingClientRect();
+ const h = Math.ceil(Math.max(rect.bottom, 0) || header.offsetHeight || 0);
  if (h > 0) document.documentElement.style.setProperty("--org-header-offset", h + "px");
 }
 
@@ -3483,7 +4114,7 @@ function setMasterDashboardHeader(active) {
  setMasterHeaderActionsVisible(!!active);
  setSedeHeaderActionsVisible(false);
  const hTitle = document.getElementById("h-title");
- if (hTitle && active) hTitle.textContent = "🧙 Vista Master";
+ if (hTitle && active) hTitle.textContent = "🧙 Master";
  const app = document.getElementById("app");
  if (app) app.classList.toggle("wide", !!active);
  pinOrgHeaderFlush();
@@ -3502,6 +4133,7 @@ function setSedeDashboardHeader(active) {
  document.body.classList.toggle("mode-master", !!active);
  document.body.classList.toggle("master-dashboard", !!active);
  document.body.classList.toggle("sede-dashboard", !!active);
+ if (active) document.body.classList.remove("mode-org");
  if (header) header.classList.toggle("header-org", !!active);
  if (brand) brand.style.justifyContent = active ? "flex-start" : "center";
  if (masterTabs) masterTabs.setAttribute("hidden", "");
@@ -3512,7 +4144,7 @@ function setSedeDashboardHeader(active) {
  setMasterHeaderActionsVisible(false);
  setSedeHeaderActionsVisible(!!active);
  const hTitle = document.getElementById("h-title");
- if (hTitle && active) hTitle.textContent = "🤝 Vista Co-organizzatore";
+ if (hTitle && active) hTitle.textContent = "🤝 Co-organizzatore";
  const app = document.getElementById("app");
  if (app) app.classList.toggle("wide", !!active);
  pinOrgHeaderFlush();
@@ -3532,7 +4164,7 @@ function setOrgDashboardHeader(active) {
  setOrgHeaderActionsVisible(!!active);
  const hTitle = document.getElementById("h-title");
  if (hTitle && MODE === "org") {
- hTitle.textContent = "🔐 Vista Organizzatore";
+ hTitle.textContent = "🔐 Organizzatore";
  }
  if (!active) {
  hide("loader");
@@ -3544,7 +4176,14 @@ function setOrgDashboardHeader(active) {
  requestAnimationFrame(syncOrgHeaderOffset);
  });
 }
-const togglePwd = id => { const i=document.getElementById(id); if(i) i.type = i.type==="password" ? "text" : "password"; };
+function togglePwd(id) {
+ const i = document.getElementById(id);
+ if (!i) return;
+ const mostra = i.type === "password";
+ i.type = mostra ? "text" : "password";
+ const btn = i.parentElement && i.parentElement.querySelector(".pwd-tog");
+ if (btn) btn.setAttribute("aria-label", mostra ? "Nascondi password" : "Mostra password");
+}
 
 let _actionOverlayDepth = 0;
 function beginActionOverlay(message) {
@@ -3559,6 +4198,7 @@ function endActionOverlay() {
 }
 
 function switchTab(id, btn) {
+ if (id === "t-eventi") id = "t-mappa";
  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
  document.querySelectorAll("#org-tabs .tab-btn").forEach(b => b.classList.remove("active"));
  document.getElementById(id)?.classList.add("active");
@@ -3725,7 +4365,12 @@ function showNotifyPopup(msg, tipo) {
  const okBtn = document.getElementById("notify-popup-ok");
  if (!ov || !textEl || !card) return;
  const t = (tipo === "err" || tipo === "ok" || tipo === "info") ? tipo : "ok";
- textEl.textContent = String(msg ?? "");
+ let testo = String(msg ?? "");
+ if (t === "err" && /Metodo non disponibile|Exception|TypeError|ReferenceError|ScriptError|at .+\.gs:\d+/i.test(testo)) {
+ try { segnalaErroreOrgClient("popup utente", null, "Messaggio tecnico non mostrato all'utente.", testo); } catch (_e) {}
+ testo = "Errore del server: il dettaglio è stato registrato. Riprova; se persiste, segnala l'orario all'organizzazione.";
+ }
+ textEl.textContent = testo;
  card.className = "dialog notify-popup-card notify-popup-" + t;
  if (iconEl) {
  iconEl.textContent = t === "err" ? "❌" : t === "info" ? "ℹ️" : "✅";
@@ -3752,7 +4397,7 @@ function flash(area, msg, tipo) {
 }
 
 function popupErrorePrenotazione(msg) {
- showNotifyPopup(String(msg || "Errore nel flusso di prenotazione."), "err");
+ showNotifyPopup(String(msg || _erroreRispostaVuota()), "err");
 }
 
 function chiediConferma(msg, cb, onCancel, opts) {
@@ -3824,10 +4469,10 @@ function inviaFeedbackFront() {
  const payload = { source, nome, email, messaggio, extra: typeof extra === "object" ? JSON.stringify(extra) : (extra || "") };
  if (typeof UUID !== "undefined" && UUID) payload.uuid = UUID;
  if (extra && extra.eventId) payload.eventId = extra.eventId;
- google.script.run
+ gildaRun()
  .withSuccessHandler(function(res) {
  btn.disabled = false;
- if (res.ok) {
+ if (res && res.ok) {
  hide("feedback-overlay");
  document.getElementById("fb-messaggio").value = "";
  var area = "reg-fa";
@@ -4144,10 +4789,12 @@ function _regLabelTipoSessionePill(sess) {
 
 function _regHtmlSessionePill(s, active) {
  const nome = s.nome || s.sessioneId || "Sessione";
- const ora = s.orario ? ` <span style="opacity:.8">| 🕑 ${s.orario}</span>` : "";
+ const dS = labelDataSessione(s, regEvSelezionato);
+ const meta = [dS, s.orario].filter(Boolean).join(" · ");
+ const ora = meta ? ` <span style="opacity:.8">| 🕑 ${escapeHtml(meta)}</span>` : "";
  return `<button class="mappa-sess-btn${active ? " active" : ""}"
  onclick="regSelezionaSessioneWizard('${String(s.sessioneId || "").replace(/'/g, "\\'")}',this)">
- 🧭 ${nome}${ora}
+ 🧭 ${escapeHtml(nome)}${ora}
  </button>`;
 }
 
@@ -4161,10 +4808,10 @@ function regApplicaSessioneWizard(sessId, btn) {
  wrap.querySelectorAll(".mappa-sess-btn").forEach(b => b.classList.remove("active"));
  btn.classList.add("active");
  }
+ _memorizzaSelezioneSessione();
  const s = regEvSelezionato?.sessioni?.find(x => x.sessioneId === sessId) || { sessioneId: sessId };
  regSessSelezionata = s;
- regTavoliSelezionati = {};
- regAttesaSelezionata = false;
+ _ripristinaSelezioneSessione(sessId);
  regGdtNumPersone = 1;
  regGdtFasciaEta = "";
  const selSess = document.getElementById("r-sessione");
@@ -4225,12 +4872,11 @@ function regApplyWizardModeForEvento(ev, sessOpt) {
   lbl2.append(s1, s2);
  }
  const title = document.getElementById("reg-s3-title");
- if (title) title.textContent = isIngresso ? "🎲 Invia informazioni" : "📝 I tuoi dati";
+ if (title) title.textContent = (isIngresso ? "🎲 Invia informazioni" : "📝 I tuoi dati") + (ev && ev.nome ? " · " + ev.nome : "");
  const desc = document.getElementById("reg-s3-desc");
  if (desc) {
- desc.textContent = isIngresso
- ? "Indica quanti venite e lascia nome e email: sono obbligatori."
- : "Inserisci i dati del prenotante, poi prosegui alla scelta dei tavoli.";
+ desc.textContent = isIngresso ? "" : "Inserisci i dati del prenotante, poi prosegui alla scelta dei tavoli.";
+ desc.classList.toggle("hidden", isIngresso);
  }
  const gdtBlock = document.getElementById("reg-gdt-block");
  if (gdtBlock) gdtBlock.classList.toggle("hidden", !isIngresso);
@@ -4435,7 +5081,7 @@ function regGdtCaricaCapienza(evId, sessId) {
  regGdtLiberi = 0;
  regGdtCapienzaPronta = false;
  regGdtAggiornaCapienzaUI();
- google.script.run
+ gildaRun()
  .withSuccessHandler((tavoli) => {
  const list = Array.isArray(tavoli) ? tavoli : [];
  const virt = list.find(t => String(t.id) === "SESSIONE_LIBERA") || list[0];
@@ -4496,6 +5142,7 @@ function inviaRegGdt() {
  const btn = document.getElementById("reg-gdt-submit");
  if (btn) btn.disabled = true;
  hide("reg-recupera-link");
+ document.body.classList.add("reg-sending");
  setLdr(inAttesa ? "Iscrizione in lista d'attesa…" : "Invio informazioni…");
  hide("reg-panel"); show("loader");
 
@@ -4518,9 +5165,10 @@ function inviaRegGdt() {
  eventId: evId, sessioneId: sessId, email: email || "(anonimo)"
  });
 
- google.script.run
+ gildaRun()
  .withSuccessHandler((res) => {
  hide("loader");
+ document.body.classList.remove("reg-sending");
  if (btn) btn.disabled = false;
  if (res && res.ok) {
  const isAttesa = !!(res.listaAttesa || inAttesa);
@@ -4533,7 +5181,7 @@ function inviaRegGdt() {
  if (isAttesa) {
  okP.innerHTML = `Abbiamo raggiunto il <strong>limite dei posti</strong>. Ti abbiamo messo in lista d'attesa<br>e ti avviseremo via <strong>email</strong> se se ne liberano.`;
  } else if (email) {
- okP.innerHTML = `Grazie! Ti abbiamo inviato un'<strong>email</strong> con il riepilogo<br>e un link personale per gestire i tuoi dati.`;
+ okP.innerHTML = `Grazie! Ti arriva un'<strong>email</strong> con il riepilogo<br>e un link personale per gestire i tuoi dati.`;
  } else {
  okP.innerHTML = `Grazie! Abbiamo registrato <strong>${num} post${num === 1 ? "o" : "i"}</strong> per questa serata.<br>Non hai lasciato un'email: i dati restano anonimi.`;
  }
@@ -4543,17 +5191,35 @@ function inviaRegGdt() {
  return;
  }
  show("reg-panel");
- popupErrorePrenotazione("⚠️ " + ((res && res.errore) || "Invio non riuscito."));
+ popupErrorePrenotazione("⚠️ " + ((res && res.errore) || _erroreRispostaVuota()));
  })
  .withFailureHandler((err) => {
+ segnalaErroreOrgClient("registraPrenotazioneMulti (iscrizione, nessuna risposta)", payloadReg, "Iscrizione salvata lato server ma il browser non ha ricevuto la conferma.", (err && err.message) || String(err || ""));
  hide("loader");
- show("reg-panel");
+ document.body.classList.remove("reg-sending");
  if (btn) btn.disabled = false;
- popupErrorePrenotazione("❌ " + (err.message || err));
+ hide("reg-panel");
+ const okTitle = document.querySelector("#reg-ok h2");
+ const okP = document.querySelector("#reg-ok .suc-panel > p");
+ if (inAttesa) {
+ if (okTitle) okTitle.textContent = "Sei in lista d'attesa!";
+ if (okP) okP.innerHTML = `Abbiamo raggiunto il <strong>limite dei posti</strong>. Ti abbiamo messo in lista d'attesa<br>e ti avviseremo via <strong>email</strong> se se ne liberano.`;
+ showNotifyPopup("Sei in lista d'attesa.", "ok");
+ } else {
+ if (okTitle) okTitle.textContent = "Iscrizione confermata";
+ if (okP) {
+ if (email) okP.innerHTML = `Grazie! Ti arriva un'<strong>email</strong> con il riepilogo<br>e un link personale per gestire i tuoi dati.`;
+ else okP.innerHTML = `Grazie! Abbiamo registrato <strong>${num} post${num === 1 ? "o" : "i"}</strong> per questa serata.<br>Non hai lasciato un'email: i dati restano anonimi.`;
+ }
+ showNotifyPopup("Iscrizione confermata.", "ok");
+ }
+ show("reg-ok");
+ show("reg-recupera-link");
  })
- .registraPrenotazioneMulti(payloadReg);
+ .registraPrenotazioneMulti(Object.assign({}, payloadReg, { _build: APP_CONFIG.buildId }));
 }
 let regSessSelezionata = null;
+let regSelezioniPerSessione = {};
 let regTavoliSelezionati = {};
 let regPrecheckAvvRequestId = 0;
 let regAttesaSelezionata = false;
@@ -4585,7 +5251,7 @@ function logRegForm(azione, dettaglio, opts) {
  nome: String(o.nome || ctx.nome || ""),
  dettaglio: String(dettaglio != null ? dettaglio : o.dettaglio || "").slice(0, 500)
  };
- google.script.run
+ gildaRun()
  .withFailureHandler(() => {})
  .logRegFormAzione(payload);
 }
@@ -4733,9 +5399,22 @@ function tornaDaRegAUserArea() {
 
 function caricaEventiReg() {
  setLdr("Caricamento eventi…"); show("loader");
+ let chiuso = false;
+ const chiudiAttesa = () => {
+ if (chiuso) return;
+ chiuso = true;
+ hide("loader");
+ show("reg-main");
+ };
+ const attesa = setTimeout(() => {
+ chiudiAttesa();
+ flash("reg-fa", "Il caricamento sta impiegando troppo. Ricarica la pagina.", "err");
+ }, 20000);
  syncFasceEtaDaFoglio(() => {
- google.script.run
+ gildaRun()
  .withSuccessHandler(ev => {
+ clearTimeout(attesa);
+ chiuso = true;
  eventiReg = (ev || []).filter(e => !isDataPassata(e.data));
  sortEventiPerDataEOra(eventiReg);
  if (!eventiReg.length) {
@@ -4754,6 +5433,7 @@ function caricaEventiReg() {
  hide("loader");
  renderRegEventi();
  show("reg-main");
+ _apriEventoDaLink();
  logRegForm("eventi_caricati", `${eventiReg.length} eventi disponibili`);
  regPreloadEventiDisponibilitaTavoli();
  }
@@ -4764,6 +5444,8 @@ function caricaEventiReg() {
  else { if (tornaBar) tornaBar.classList.add("hidden"); if (recuperaBar) recuperaBar.classList.remove("hidden"); }
  })
  .withFailureHandler(err => {
+ clearTimeout(attesa);
+ chiuso = true;
  hide("loader"); show("reg-main");
  var dettaglio = err && err.message ? " " + err.message : "";
  flash("reg-fa","Impossibile caricare gli eventi." + dettaglio,"err");
@@ -4780,11 +5462,11 @@ function caricaUtente() {
  }
  setLdr("Caricamento prenotazioni…"); show("loader"); hide("user-main");
  stopLiveSync();
- google.script.run
+ gildaRun()
  .withSuccessHandler(r => {
  if (r == null) {
 console.error("[caricaUtente] getPrenotazioni ha restituito null.");
-mostraFallbackCaricamentoUtente("Errore di caricamento dati utente. Riprova tra pochi secondi.");
+mostraFallbackCaricamentoUtente(_erroreRispostaVuota());
  return;
  }
  if (Array.isArray(r?.fasceEta)) {
@@ -4795,14 +5477,14 @@ mostraFallbackCaricamentoUtente("Errore di caricamento dati utente. Riprova tra 
  })
  .withFailureHandler(err => {
  console.error("[caricaUtente] failure getPrenotazioni:", err);
- mostraFallbackCaricamentoUtente((err && err.message) ? err.message : "Operazione non riuscita. Riprova.");
+ mostraFallbackCaricamentoUtente(_messaggioErroreServer(err));
  })
  .getPrenotazioniSafe(UUID);
 }
 
 function mostraFallbackCaricamentoUtente(msg) {
  hide("loader");
- const detail = escapeHtml(msg || "Errore caricamento area utente.");
+ const detail = escapeHtml(msg || _erroreRispostaVuota());
  const noUuid = document.getElementById("no-uuid");
  if (noUuid) {
  noUuid.innerHTML = `<div class="flash f-err">⚠️ ${detail}</div>`;
@@ -4866,45 +5548,108 @@ function regHtmlTipiTavolo(tipi) {
  return `<div class="rec-tipit-wrap" role="group" aria-label="Tipi di tavolo disponibili per questo evento">${pills}</div>`;
 }
 
+function _prefissoHttps() {
+ return "https" + ":" + String.fromCharCode(47) + String.fromCharCode(47);
+}
+function linkPrenotazioneEsterna(ev) {
+ const u = String(ev && ev.linkPrenotazioneEsterna || "").trim();
+ const p = _prefissoHttps();
+ return u.slice(0, p.length).toLowerCase() === p ? u : "";
+}
+
+let _uscitaPortaleUrl = "";
+function chiediUscitaPortale(url) {
+ const u = String(url || "").trim();
+ const p = _prefissoHttps();
+ if (u.slice(0, p.length).toLowerCase() !== p) return;
+ _uscitaPortaleUrl = u;
+ show("uscita-portale-overlay");
+}
+function chiudiUscitaPortale() {
+ _uscitaPortaleUrl = "";
+ hide("uscita-portale-overlay");
+}
+function confermaUscitaPortale() {
+ const u = _uscitaPortaleUrl;
+ chiudiUscitaPortale();
+ if (u) window.open(u, "_blank", "noopener");
+}
+
+function _apriEventoDaLink() {
+ if (window._eventoLinkAperto) return;
+ // La query può non arrivare nella sandbox Apps Script: fallback sul valore passato dal server.
+ const id = String(new URLSearchParams(window.location.search).get("evento")
+ || (APP_CONFIG.feedbackParams || {}).evento || "").trim();
+ if (!id) return;
+ window._eventoLinkAperto = true;
+ const ev = (eventiReg || []).find(e => String(e.eventId || "") === id);
+ if (!ev) {
+ flash("reg-fa", "Questo evento non è tra quelli aperti.", "err");
+ return;
+ }
+ const esterno = linkPrenotazioneEsterna(ev);
+ if (esterno) {
+ chiediUscitaPortale(esterno);
+ return;
+ }
+ regSelezionaEvento(id);
+}
+
 function renderRegEventi() {
  const grid = document.getElementById("reg-ev-grid");
  if (!grid) return;
  const openMap = window._regEventHasTavoliMap || {};
 
  grid.innerHTML = eventiReg.map((ev, i) => {
- const sessioni = (ev.sessioni || []).slice();
- // Ordina per ora d'inizio sessione prima di mostrare le pills
- sessioni.sort((a, b) => orarioToMinuti(a.orario || "") - orarioToMinuti(b.orario || ""));
+ const sessioni = sortSessioniPerDataOra(ev.sessioni || []);
  const nSess = sessioni.length;
+ const dataEvLbl = labelDataEvento(ev);
 
  let sessPills = "";
- if (nSess === 1 && sessioni[0].orario) {
- sessPills = `<span class="rec-pill ev-sess">🕐 ${sessioni[0].orario}</span>`;
+ if (nSess === 1 && (sessioni[0].orario || sessioni[0].data || sessioni[0].dataIso)) {
+ const d1 = labelDataSessione(sessioni[0], ev);
+ sessPills = `<span class="rec-pill ev-sess">🕐 ${[d1, sessioni[0].orario].filter(Boolean).join(" · ")}</span>`;
  } else if (nSess === 1) {
  sessPills = `<span class="rec-pill ev-sess">1 sessione</span>`;
  } else {
- sessPills = sessioni.map(s =>
- `<span class="rec-pill ev-sess">🕐 ${s.nome}${s.orario ? " · " + s.orario : ""}</span>`
- ).join("");
+ sessPills = sessioni.map(s => {
+  const d = labelDataSessione(s, ev);
+  return `<span class="rec-pill ev-sess">🕐 ${escapeHtml([s.nome, d, s.orario].filter(Boolean).join(" · "))}</span>`;
+ }).join("");
  }
 
  const statoPren = openMap[ev.eventId];
- const inApertura = (statoPren === false);
- const prenInfo = (statoPren === false)
+ const linkEsterno = linkPrenotazioneEsterna(ev);
+ const inApertura = !linkEsterno && (statoPren === false);
+ const prenInfo = linkEsterno
+ ? `<div class="rec-info-row">↗ <span>Prenotazione sul portale della fiera</span></div>`
+ : ((statoPren === false)
  ? `<div class="rec-info-row">📌 <span>Prenotazioni in apertura</span></div>`
- : "";
- const cardOnclick = inApertura ? "" : ` onclick="regSelezionaEvento('${ev.eventId}')"`;
- const ctaText = inApertura
+ : "");
+ const cardOnclick = linkEsterno
+ ? ` data-portale="${escapeHtml(linkEsterno)}" onclick="chiediUscitaPortale(this.getAttribute('data-portale'))"`
+ : (inApertura ? "" : ` onclick="regSelezionaEvento('${ev.eventId}')"`);
+ const ctaText = linkEsterno
+ ? `<span>Prenota in fiera <span style="font-size:14px">→</span></span>`
+ : (inApertura
  ? `<span style="color:var(--ash);font-style:italic">Prenotazioni in apertura</span>`
- : `<span>Prenota <span style="font-size:14px">→</span></span>`;
+ : `<span>Prenota <span style="font-size:14px">→</span></span>`);
+ const cardKey = linkEsterno
+ ? ` tabindex="0" role="link" onkeydown="if(event.key==='Enter'){event.preventDefault();chiediUscitaPortale(this.getAttribute('data-portale'))}"`
+ : (inApertura ? "" : ` tabindex="0" role="link" onkeydown="if(event.key==='Enter'){event.preventDefault();regSelezionaEvento('${ev.eventId}')}"`);
+ const locUrl = String(ev.locandinaUrl || "").trim();
+ const locHtml = locUrl
+  ? `<div class="rec-locandina"><img src="${escapeHtml(locUrl)}" alt="" loading="lazy" decoding="async" onerror="this.closest('.rec-locandina')?.remove()"></div>`
+  : "";
 
  return `
- <div class="reg-ev-card${inApertura ? " disabled" : ""}"${cardOnclick}${inApertura ? "" : ` tabindex="0" role="link" onkeydown="if(event.key==='Enter'){event.preventDefault();regSelezionaEvento('${ev.eventId}')}"`} style="animation-delay:${Math.min(i, 6)*.04}s">
+ <div class="reg-ev-card${inApertura ? " disabled" : ""}${locUrl ? " has-locandina" : ""}"${cardOnclick}${cardKey} style="animation-delay:${Math.min(i, 6)*.04}s">
+ ${locHtml}
  <div class="rec-body">
  <div class="rec-nome">${ev.nome}</div>
  ${regHtmlTipiTavolo(ev.tipiTavolo)}
  <div class="rec-info">
- ${ev.data ? `<div class="rec-info-row">📅 <span>${formatDataItaliana(ev.data)}</span></div>` : ""}
+ ${dataEvLbl ? `<div class="rec-info-row">📅 <span>${escapeHtml(dataEvLbl)}</span></div>` : ""}
  ${ev.luogo ? `<div class="rec-info-row">📍 <span>${formatLuogoConACapo(ev.luogo)}</span></div>` : ""}
  ${prenInfo}
  </div>
@@ -4967,13 +5712,15 @@ function apriDettaglioEvento(idx) {
  const contentEl = document.getElementById("evento-detail-content");
  if (!titleEl || !contentEl) return;
 
- const sessioni = (ev.sessioni || []).slice().sort((a, b) => orarioToMinuti(a.orario || "") - orarioToMinuti(b.orario || ""));
+ const sessioni = sortSessioniPerDataOra(ev.sessioni || []);
  const tipoHtml = regHtmlTipiTavolo(ev.tipiTavolo || []);
  const descr = (ev.descrizione || "").trim();
  const descrHtml = descr ? formatDesc(descr) : `<p style="font-style:italic;color:var(--ash)">Nessuna descrizione disponibile.</p>`;
+ const dataEvLbl = labelDataEvento(ev);
  const sessHtml = sessioni.length
  ? sessioni.map((s, si) => {
- const label = `🕐 ${escapeHtml(s.nome || s.sessioneId || "Sessione")}${s.orario ? " · " + escapeHtml(s.orario) : ""}`;
+ const dS = labelDataSessione(s, ev);
+ const label = `🕐 ${escapeHtml([s.nome || s.sessioneId || "Sessione", dS, s.orario].filter(Boolean).join(" · "))}`;
  const senzaTav = sessioneSenzaTavoli(s);
  const giochi = _regGdtGiochiLista(s);
  let body = "";
@@ -4990,9 +5737,29 @@ function apriDettaglioEvento(idx) {
  : `<span style="font-size:13px;color:var(--ash);font-style:italic">Nessuna sessione disponibile.</span>`;
 
  titleEl.textContent = ev.nome || "Dettaglio evento";
+ const linkEsterno = linkPrenotazioneEsterna(ev);
+ const locUrl = String(ev.locandinaUrl || "").trim();
+ const locHtml = locUrl
+  ? `<div class="ev-detail-locandina"><img src="${escapeHtml(locUrl)}" alt="Locandina ${escapeHtml(ev.nome || "")}" loading="lazy" decoding="async" onerror="this.closest('.ev-detail-locandina')?.remove()"></div>`
+  : "";
+ if (linkEsterno) {
  contentEl.innerHTML = `
+ ${locHtml}
  <div class="ev-detail-meta">
- ${ev.data ? `<span class="rec-pill ev-sess">📅 ${escapeHtml(formatDataItaliana(ev.data))}</span>` : ""}
+ ${dataEvLbl ? `<span class="rec-pill ev-sess">📅 ${escapeHtml(dataEvLbl)}</span>` : ""}
+ ${ev.luogo ? `<span class="rec-pill ev-sess">📍 ${escapeHtml(ev.luogo)}</span>` : ""}
+ </div>
+ <div class="ev-detail-desc">${descrHtml}</div>
+ <p style="margin:14px 0;line-height:1.5">Questa prenotazione non la gestiamo noi. I posti sono sul portale di chi organizza la fiera.</p>
+ <button type="button" class="btn btn-p" data-portale="${escapeHtml(linkEsterno)}" onclick="chiediUscitaPortale(this.getAttribute('data-portale'))">Vai al portale della fiera</button>
+ `;
+ show("evento-detail-overlay");
+ return;
+ }
+ contentEl.innerHTML = `
+ ${locHtml}
+ <div class="ev-detail-meta">
+ ${dataEvLbl ? `<span class="rec-pill ev-sess">📅 ${escapeHtml(dataEvLbl)}</span>` : ""}
  ${ev.luogo ? `<span class="rec-pill ev-sess">📍 ${escapeHtml(ev.luogo)}</span>` : ""}
  </div>
  ${tipoHtml}
@@ -5007,7 +5774,7 @@ function apriDettaglioEvento(idx) {
  if (sessioneSenzaTavoli(s)) return;
  const slot = document.getElementById("ev-detail-tavoli-" + si);
  if (!slot || !evId) return;
- google.script.run
+ gildaRun()
  .withSuccessHandler((tavoli) => {
  if (!slot.isConnected) return;
  slot.outerHTML = _htmlTavoliDettaglioEvento(tavoli);
@@ -5082,7 +5849,7 @@ function regEventoHaTavoliAttivi(evObj, onDone) {
  sessioni.forEach(s => {
  const sessId = String(s?.sessioneId || "").trim();
  if (!sessId) { finish(); return; }
- google.script.run
+ gildaRun()
  .withSuccessHandler(tavoli => {
  if (!found && Array.isArray(tavoli) && tavoli.length > 0) found = true;
  finish();
@@ -5098,18 +5865,32 @@ function regSelezionaEvento(evId) {
  regEvSelezionato = eventiReg.find(e => e.eventId === evId);
  regSessSelezionata = null;
  regTavoliSelezionati = {};
+ regSelezioniPerSessione = {};
  regAttesaSelezionata = false;
  regGdtNumPersone = 1;
  regGdtFasciaEta = "";
  if (!regEvSelezionato) return;
+ regRenderEventoInfo(regEvSelezionato);
 
  const selEv = document.getElementById("r-evento");
  selEv.innerHTML = `<option value="${evId}" selected></option>`;
 
- const sessioni = (regEvSelezionato.sessioni || []).slice().sort((a, b) => orarioToMinuti(a.orario || "") - orarioToMinuti(b.orario || ""));
+ const sessioni = sortSessioniPerDataOra(regEvSelezionato.sessioni || []);
  const misto = eventoSessioniMiste(regEvSelezionato);
+ const dataEvLbl = labelDataEvento(regEvSelezionato);
  document.getElementById("reg-s2-title").textContent =
- "📜 " + regEvSelezionato.nome + (regEvSelezionato.data ? " · " + formatDataItaliana(regEvSelezionato.data) : "");
+ "📜 " + regEvSelezionato.nome + (dataEvLbl ? " · " + dataEvLbl : "");
+ const descS2 = document.querySelector("#reg-s2 .reg-step-desc");
+ if (descS2) {
+  const piuDate = ((regEvSelezionato.sessioni || []).reduce((acc, s) => {
+   const iso = (typeof dataItalianaToYYYYMMDD === "function" ? dataItalianaToYYYYMMDD(s && (s.dataIso || s.data)) : "") || "";
+   if (iso && acc.indexOf(iso.substring(0, 10)) < 0) acc.push(iso.substring(0, 10));
+   return acc;
+  }, []).length >= 2);
+  descS2.innerHTML = piuDate
+   ? "I tavoli sono prenotabili su tutte le sessioni che vedi qua sotto. Scegli uno o più tavoli in ordine di preferenza: proveremo ad assegnarti il primo disponibile. Se non ci sono posti, entrerai in lista d'attesa con le preferenze indicate."
+   : "Scegli uno o più tavoli in ordine di preferenza: proveremo ad assegnarti il primo disponibile. Se non ci sono posti, entrerai in lista d'attesa con le preferenze indicate.";
+ }
 
  if (misto) {
  regTipoMisto = "";
@@ -5147,12 +5928,14 @@ function regSelezionaEvento(evId) {
  } else if (!isIngresso && sessioni.length > 1) {
  const pillsEl = document.getElementById("reg-sess-pills");
  if (pillsEl) {
- pillsEl.innerHTML = sessioni.map((s, i) =>
- `<button class="mappa-sess-btn${i===0?" active":""}"
+ pillsEl.innerHTML = sortSessioniPerDataOra(sessioni).map((s, i) => {
+ const dS = labelDataSessione(s, regEvSelezionato);
+ const meta = [dS, s.orario].filter(Boolean).join(" · ");
+ return `<button class="mappa-sess-btn${i===0?" active":""}"
  onclick="regSelezionaSessione('${String(s.sessioneId || "").replace(/'/g, "\\'")}',this)">
- 🧭 ${s.nome||s.sessioneId}${s.orario?` <span style="opacity:.8">| 🕑 ${s.orario}</span>`:""}
- </button>`
- ).join("");
+ 🧭 ${escapeHtml(s.nome||s.sessioneId)}${meta?` <span style="opacity:.8">| 🕑 ${escapeHtml(meta)}</span>`:""}
+ </button>`;
+ }).join("");
  }
  show("reg-sess-wrap");
  hide("reg-gdt-sess-wrap");
@@ -5206,9 +5989,7 @@ function regMostraSceltaMisto() {
 function regScegliTipoMisto(tipo) {
  const wantGdt = tipo === "gdt";
  regTipoMisto = wantGdt ? "gdt" : "gdr";
- const sessioni = (regEvSelezionato?.sessioni || []).slice()
- .filter(s => sessioneSenzaTavoli(s) === wantGdt)
- .sort((a, b) => orarioToMinuti(a.orario || "") - orarioToMinuti(b.orario || ""));
+ const sessioni = sortSessioniPerDataOra((regEvSelezionato?.sessioni || []).filter(s => sessioneSenzaTavoli(s) === wantGdt));
  if (!sessioni.length) return;
  hide("reg-misto-scelta");
  show("reg-s1-lista");
@@ -5248,6 +6029,71 @@ function regPreloadEventiDisponibilitaTavoli(onDone) {
  if (typeof onDone === "function") onDone();
 }
 
+function _memorizzaSelezioneSessione() {
+ const sid = String(regSessSelezionata?.sessioneId || "").trim();
+ if (!sid) return;
+ const tavoli = {};
+ Object.keys(regTavoliSelezionati || {}).forEach(k => { tavoli[k] = regTavoliSelezionati[k]; });
+ if (!Object.keys(tavoli).length && !regAttesaSelezionata) {
+ delete regSelezioniPerSessione[sid];
+ } else {
+ regSelezioniPerSessione[sid] = {
+ tavoli: tavoli,
+ attesa: !!regAttesaSelezionata,
+ attesaNum: regAttesaNumPersone,
+ attesaFascia: regAttesaFasciaEta,
+ attesaPref: (regAttesaPreferenze || []).slice()
+ };
+ }
+ _segnaPillSessioniScelte();
+}
+
+function _ripristinaSelezioneSessione(sessId) {
+ const saved = regSelezioniPerSessione[String(sessId || "").trim()];
+ regTavoliSelezionati = {};
+ if (saved && saved.tavoli) {
+ Object.keys(saved.tavoli).forEach(k => { regTavoliSelezionati[k] = saved.tavoli[k]; });
+ }
+ regAttesaSelezionata = !!(saved && saved.attesa);
+ if (saved && saved.attesa) {
+ regAttesaNumPersone = saved.attesaNum || 1;
+ regAttesaFasciaEta = saved.attesaFascia || "";
+ regAttesaPreferenze = (saved.attesaPref || []).slice();
+ }
+}
+
+function _segnaPillSessioniScelte() {
+ document.querySelectorAll("#reg-sess-pills .mappa-sess-btn").forEach(btn => {
+ const oc = String(btn.getAttribute("onclick") || "");
+ const m = oc.match(/regSelezionaSessione\('([^']*)'/);
+ const sid = m ? m[1] : "";
+ const sel = regSelezioniPerSessione[sid];
+ const scelta = !!(sel && (Object.keys(sel.tavoli || {}).length || sel.attesa));
+ btn.classList.toggle("has-scelta", scelta);
+ });
+}
+
+function _dipingiSelezioneTavoli(evId, sessId) {
+ const sKey = "reg_" + sl(evId) + "_" + sl(sessId);
+ Object.keys(regTavoliSelezionati || {}).forEach(id => {
+ const t = regTavoliSelezionati[id];
+ const card = document.getElementById("rtc-" + sKey + "-" + id);
+ const qWrap = document.getElementById("qty-" + sKey + "-" + id);
+ const fasceInline = document.getElementById("fasce-inline-" + sKey + "-" + id);
+ const fasceChips = document.getElementById("fasce-chips-" + sKey + "-" + id);
+ card?.classList.add("selected");
+ qWrap?.classList.remove("hidden");
+ const qv = document.getElementById("qval-" + sKey + "-" + id);
+ if (qv) qv.textContent = String(t.num || 1);
+ if (fasceInline && fasceChips) {
+ fasceInline.classList.remove("hidden");
+ const fasciaSalvata = t.fasciaEta || "";
+ renderFasceInlineIn(fasceChips, id, sKey, "");
+ if (regTavoliSelezionati[id]) regTavoliSelezionati[id].fasciaEta = fasciaSalvata;
+ }
+ });
+}
+
 function regSelezionaSessione(sessId, btn) {
  // Da step tavoli (solo GDR multi): se la sessione è ingresso, torna allo step prenotazione.
  if (eventoSessioniMiste(regEvSelezionato) || sessioneSenzaTavoli(
@@ -5256,12 +6102,11 @@ function regSelezionaSessione(sessId, btn) {
  regApplicaSessioneWizard(sessId, btn);
  return;
  }
+ _memorizzaSelezioneSessione();
  document.querySelectorAll("#reg-sess-pills .mappa-sess-btn").forEach(b => b.classList.remove("active"));
  if (btn) btn.classList.add("active");
  const s = regEvSelezionato?.sessioni?.find(x => x.sessioneId === sessId);
  regSessSelezionata = s || { sessioneId: sessId };
- regTavoliSelezionati = {};
- regAttesaSelezionata = false;
  const selSess = document.getElementById("r-sessione");
  selSess.innerHTML = `<option value="${sessId}" selected></option>`;
  logRegForm("sessione_scelta", s?.nome || sessId, {
@@ -5277,7 +6122,7 @@ function regSelezionaSessione(sessId, btn) {
 function caricaTavoliRegNew(evId, sessId) {
  document.getElementById("reg-tav-grid").innerHTML =
  `<div style="grid-column:1/-1">${loaderHtml("Caricamento tavoli…")}</div>`;
- google.script.run
+ gildaRun()
  .withSuccessHandler(tavoli => {
  const list = tavoli || [];
  logRegForm("tavoli_caricati", `${list.length} tavoli`, { eventId: evId, sessioneId: sessId });
@@ -5300,8 +6145,7 @@ function renderRegTavoli(evId, sessId, tavoli) {
  return !(t === "PANEL" || t === "GIOCO_LIBERO");
  };
 
- regTavoliSelezionati = {};
- regAttesaPreferenze = [];
+ _ripristinaSelezioneSessione(sessId);
  regTavoliCorrenti = Array.isArray(tavoli) ? tavoli : [];
 
  if (!tavoli.length) {
@@ -5369,7 +6213,7 @@ function renderRegTavoli(evId, sessId, tavoli) {
  </div>
  ${fasceEsistenti}
  ${pieno || !richiedeFascia(t.tipo) ? '' : `
- <!-- Fasce età inline – visibili solo quando il tavolo è selezionato -->
+ <div class="tav-fasce-note" hidden>Fasce età del gruppo</div>
  <div class="tav-fasce-inline hidden" id="fasce-inline-${sKey}-${t.id}" onclick="event.stopPropagation()">
  <div class="lbl-fasce" id="fasce-lbl-${sKey}-${t.id}">🎯 Fasce età del gruppo</div>
  <div class="fasce-grid" id="fasce-chips-${sKey}-${t.id}"></div>
@@ -5400,6 +6244,7 @@ function renderRegTavoli(evId, sessId, tavoli) {
  hide("reg-attesa-row");
  }
 
+ _dipingiSelezioneTavoli(evId, sessId);
  aggiornaRegSummary();
 }
 
@@ -5524,6 +6369,7 @@ function regToggleTavolo(id, gioco, liberi, max) {
  document.getElementById("rtc-attesa")?.classList.remove("selected");
  regAttesaSelezionata = false;
 
+ _memorizzaSelezioneSessione();
  aggiornaRegSummary();
 }
 
@@ -5585,6 +6431,7 @@ function regCambiaQty(id, liberi, delta) {
 }
 
 function aggiornaRegSummary() {
+ _memorizzaSelezioneSessione();
  const entries = Object.values(regTavoliSelezionati);
  const hasAttesa = regAttesaSelezionata;
  const hasScelta = entries.length > 0 || hasAttesa;
@@ -5597,7 +6444,19 @@ function aggiornaRegSummary() {
  const tutteFasceOk = entries.every(t => !richiedeFascia(t) || (t.fasciaEta && t.fasciaEta.trim() !== ""));
  const attesaFasciaOk = !regAttesaFasciaEta || regAttesaFasciaEta.trim() === "" ? false : true;
  const attesaPrefsOk = regAttesaPreferenze && regAttesaPreferenze.length > 0;
- const sceltaValida = hasScelta && (hasAttesa ? (attesaFasciaOk && attesaPrefsOk) : tutteFasceOk);
+ const correnteValida = hasScelta && (hasAttesa ? (attesaFasciaOk && attesaPrefsOk) : tutteFasceOk);
+ const altreValide = Object.keys(regSelezioniPerSessione).some(sid => {
+ if (sid === String(regSessSelezionata?.sessioneId || "")) return false;
+ const sel = regSelezioniPerSessione[sid];
+ const tvs = Object.values(sel.tavoli || {});
+ if (sel.attesa) return !!(sel.attesaFascia && String(sel.attesaFascia).trim() && (sel.attesaPref || []).length);
+ return tvs.length > 0 && tvs.every(t => {
+ const tipo = String(t?.tipo || "").trim().toUpperCase();
+ const serve = !(tipo === "PANEL" || tipo === "GIOCO_LIBERO");
+ return !serve || (t.fasciaEta && String(t.fasciaEta).trim());
+ });
+ });
+ const sceltaValida = correnteValida || (altreValide && (!hasScelta || correnteValida));
  const nextBtn = document.getElementById("reg-s2-next");
  if (nextBtn) nextBtn.disabled = !sceltaValida;
  const submitBtn = document.getElementById("r-submit");
@@ -5855,7 +6714,7 @@ function regConfermaWarningStep34(onDecision) {
  const prenotazioni = _buildRegPrenotazioniSnapshot();
  if (!prenotazioni.length) { done(true); return; }
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  const warns = []
  .concat(res?.warnings?.avventura ? [res.warnings.avventura] : [])
@@ -5904,7 +6763,7 @@ function regPrecheckAvventuraGiaGiocata() {
  return;
  }
  const reqId = ++regPrecheckAvvRequestId;
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (reqId !== regPrecheckAvvRequestId) return;
  const avvWarn = [
@@ -5990,12 +6849,25 @@ function regAggiornaBloccoEmail() {
  }
 }
 
+function _sessioniDaInviare() {
+ _memorizzaSelezioneSessione();
+ const sessioni = (regEvSelezionato && regEvSelezionato.sessioni) || [];
+ return Object.keys(regSelezioniPerSessione).map(sid => {
+ const sel = regSelezioniPerSessione[sid];
+ const meta = sessioni.find(s => String(s.sessioneId) === sid) || { sessioneId: sid, nome: sid };
+ const entries = Object.values(sel.tavoli || {});
+ if (!entries.length && !sel.attesa) return null;
+ return { sid, meta, sel, entries };
+ }).filter(Boolean);
+}
+
 function renderRegRiepilogo() {
  const el = document.getElementById("reg-riepilogo");
  if (!el) return;
  const ev = regEvSelezionato;
- const sess = regSessSelezionata;
- const entries = Object.values(regTavoliSelezionati);
+ const gruppi = _sessioniDaInviare();
+ const sess = gruppi.length === 1 ? gruppi[0].meta : regSessSelezionata;
+ const entries = gruppi.length ? gruppi.reduce((acc, g) => acc.concat(g.entries), []) : Object.values(regTavoliSelezionati);
  const totP = entries.reduce((s,t) => s + t.num, 0);
 
  let tavoloHtml = regAttesaSelezionata
@@ -6022,15 +6894,20 @@ function renderRegRiepilogo() {
  <div class="rrep-lbl">📜 Evento</div>
  <div class="rrep-val">${ev?.nome||"–"}</div>
  </div>
- ${sess?.nome ? `<div class="rrep-item">
+ ${gruppi.length > 1 ? gruppi.map(g => {
+ const nomeS = g.meta.nome || g.sid;
+ const quando = [labelDataSessione(g.meta, ev), g.meta.orario].filter(Boolean).join(" · ");
+ const tavoli = g.entries.map(t => `${escapeHtml(t.gioco)} ×${t.num}`).join(", ") || (g.sel.attesa ? "Lista d'attesa" : "–");
+ return `<div class="rrep-item"><div class="rrep-lbl">🧭 Sessione</div><div class="rrep-val">${escapeHtml(nomeS)}${quando ? " · " + escapeHtml(quando) : ""}<div style="font-size:12px;color:var(--smoke)">${tavoli}</div></div></div>`;
+ }).join("") : (sess?.nome ? `<div class="rrep-item">
  <div class="rrep-lbl">🧭 Sessione</div>
  <div class="rrep-val">${sess.nome}${sess.orario?" · "+sess.orario:""}</div>
- </div>` : ""}
- ${tavoloHtml}
- <div class="rrep-item">
+ </div>` : "")}
+ ${gruppi.length > 1 ? "" : tavoloHtml}
+ ${regPrenotantePartecipa ? "" : `<div class="rrep-item">
  <div class="rrep-lbl">Prenotante</div>
- <div class="rrep-val">${regPrenotantePartecipa ? "Partecipa" : "Non partecipa (prenota per altri)"}</div>
- </div>
+ <div class="rrep-val">Non partecipa</div>
+ </div>`}
  ${!regAttesaSelezionata && totP > 0 ? `<div class="rrep-item">
  <div class="rrep-lbl">Totale persone</div>
  <div class="rrep-val" style="color:var(--ember)">${totP}</div>
@@ -6038,10 +6915,29 @@ function renderRegRiepilogo() {
 }
 
 // ── Navigazione indietro ────────────────────
+function regRenderEventoInfo(ev) {
+ const box = document.getElementById("reg-evento-info");
+ if (!box) return;
+ const dataEv = labelDataEvento(ev) || "";
+ // La data va nelle pillole solo se la sessione cade in un giorno diverso dall'evento.
+ const pillole = sortSessioniPerDataOra(ev.sessioni || []).map(s => {
+ const d = labelDataSessione(s, ev);
+ const testo = [s.nome, d !== dataEv ? d : "", s.orario].filter(Boolean).join(" · ");
+ return testo ? `<span class="rec-pill ev-sess">🕐 ${escapeHtml(testo)}</span>` : "";
+ }).join("");
+ const meta = [dataEv ? "📅 " + dataEv : "", ev.luogo ? "📍 " + ev.luogo : ""].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ");
+ box.innerHTML = `<div style="font-family:var(--font-d);font-size:18px;color:var(--ink)">📜 ${escapeHtml(ev.nome || "")}</div>`
+ + (meta ? `<div style="margin-top:4px;font-size:13px;color:var(--smoke)">${meta}</div>` : "")
+ + (pillole ? `<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">${pillole}</div>` : "");
+ show("reg-evento-info");
+}
+
 function regTornaStep1() {
  logRegForm("indietro", "Torna a scelta evento (fase 1)");
+ hide("reg-evento-info");
  regSessSelezionata = null;
  regTavoliSelezionati = {};
+ regSelezioniPerSessione = {};
  regAttesaSelezionata = false;
  regAttesaNumPersone = 1;
  regAttesaFasciaEta = "";
@@ -6086,6 +6982,50 @@ function regTornaStep3() {
  hide("reg-s4"); show("reg-s2");
 }
 
+function initRegSwipe() {
+ const root = document.getElementById("reg-panel");
+ if (!root || root.dataset.swipe === "1") return;
+ root.dataset.swipe = "1";
+ let x0 = 0;
+ let y0 = 0;
+ let attivo = false;
+ root.addEventListener("touchstart", (e) => {
+  if (!window.matchMedia("(max-width: 820px)").matches) return;
+  if (e.touches.length !== 1) return;
+  const t = e.target;
+  if (t.closest("input, textarea, select, button, a, label")) return;
+  x0 = e.touches[0].clientX;
+  y0 = e.touches[0].clientY;
+  attivo = true;
+ }, { passive: true });
+ root.addEventListener("touchend", (e) => {
+  if (!attivo) return;
+  attivo = false;
+  const punto = e.changedTouches && e.changedTouches[0];
+  if (!punto) return;
+  const dx = punto.clientX - x0;
+  const dy = punto.clientY - y0;
+  if (Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
+  const visibile = (id) => {
+   const el = document.getElementById(id);
+   return el && !el.classList.contains("hidden");
+  };
+  const clicca = (el) => {
+   if (!el || el.disabled) return;
+   el.click();
+  };
+  if (dx < 0) {
+   if (visibile("reg-s3")) clicca(document.getElementById("reg-s3-next"));
+   else if (visibile("reg-s2")) clicca(document.getElementById("reg-s2-next"));
+   return;
+  }
+  const passo = visibile("reg-s4") ? "reg-s4" : visibile("reg-s2") ? "reg-s2" : visibile("reg-s3") ? "reg-s3" : "";
+  if (!passo) return;
+  const indietro = document.querySelector("#" + passo + " button");
+  clicca(indietro);
+ }, { passive: true });
+}
+
 function setRegStep(n) {
  [1,2,3,4].forEach(i => {
  const el = document.getElementById("rs-"+i);
@@ -6117,7 +7057,8 @@ function inviaReg() {
  if (!nome) { logRegForm("invio_bloccato", "Nome mancante"); popupErrorePrenotazione("⚠️ Inserisci nome e cognome."); return; }
  if (!email||!email.includes("@")) { logRegForm("invio_bloccato", "Email non valida"); popupErrorePrenotazione("⚠️ Email non valida."); return; }
  if (!evId) { logRegForm("invio_bloccato", "Evento non selezionato"); popupErrorePrenotazione("⚠️ Nessun evento selezionato."); return; }
- if (!entries.length && !regAttesaSelezionata) { logRegForm("invio_bloccato", "Nessun tavolo selezionato"); popupErrorePrenotazione("⚠️ Seleziona almeno un tavolo."); return; }
+ const gruppiInvio = _sessioniDaInviare();
+ if (!gruppiInvio.length) { logRegForm("invio_bloccato", "Nessun tavolo selezionato"); popupErrorePrenotazione("⚠️ Seleziona almeno un tavolo."); return; }
 
  // Costruisci array prenotazioni con fasciaEta per-tavolo (lista d'attesa: num, fascia e preferenze richiesti)
  let prenotazioni;
@@ -6160,6 +7101,7 @@ function inviaReg() {
 
  document.getElementById("r-submit").disabled = true;
  hide("reg-recupera-link");
+ document.body.classList.add("reg-sending");
  setLdr("Invio prenotazione…"); hide("reg-panel"); show("loader");
 
  const detInvio = regAttesaSelezionata
@@ -6184,18 +7126,21 @@ function inviaReg() {
  const p = partecipantiRaw[i];
  if (!p.nome) {
  show("reg-panel"); hide("loader");
+ document.body.classList.remove("reg-sending");
  popupErrorePrenotazione(`⚠️ Inserisci un nome o nickname per il partecipante #${i + 1}.`);
  document.getElementById("r-submit").disabled = false;
  return;
  }
  if (!etichettaPartecipanteRegOk(p.nome)) {
  show("reg-panel"); hide("loader");
+ document.body.classList.remove("reg-sending");
  popupErrorePrenotazione(`⚠️ Nome o nickname non valido per il partecipante #${i + 1} (max 120 caratteri).`);
  document.getElementById("r-submit").disabled = false;
  return;
  }
  if ((p.emailEnabled || p.email) && !p.email.includes("@")) {
  show("reg-panel"); hide("loader");
+ document.body.classList.remove("reg-sending");
  popupErrorePrenotazione(`⚠️ Inserisci un'email valida per il partecipante #${i + 1}.`);
  document.getElementById("r-submit").disabled = false;
  return;
@@ -6206,62 +7151,81 @@ function inviaReg() {
  .map(p => ({ nome: p.nome, email: p.email && p.email.includes("@") ? p.email : "" }));
  if (!regPrenotantePartecipa && partecipantiPuliti.length === 0) {
  show("reg-panel"); hide("loader");
+ document.body.classList.remove("reg-sending");
  popupErrorePrenotazione("⚠️ Hai indicato che non partecipi: inserisci almeno un partecipante (es. nome del figlio).");
  document.getElementById("r-submit").disabled = false;
  return;
  }
  if (partecipantiPuliti.length) payloadReg.partecipanti = partecipantiPuliti;
  }
- google.script.run
- .withSuccessHandler(res => {
+ const payloads = gruppiInvio.map(g => {
+ let prenG;
+ if (g.sel.attesa) {
+ const sessNome = g.meta.nome || g.sid;
+ const baseTav = `Lista d'attesa – ${regEvSelezionato?.nome||evId} – ${sessNome}`;
+ prenG = [{ tavolo: `${baseTav} | Pref: ${(g.sel.attesaPref || []).join(", ")}`, numPersone: g.sel.attesaNum || 1, fasciaEta: String(g.sel.attesaFascia || "").trim() }];
+ } else {
+ prenG = g.entries.map(t => ({ tavolo: `${t.id} – ${t.gioco}`, numPersone: t.num, fasciaEta: t.fasciaEta }));
+ }
+ return Object.assign({}, payloadReg, { sessioneId: g.sid, prenotazioni: prenG });
+ });
+ _inviaPayloadsInSerie(payloads, 0, []);
+}
+
+function _inviaPayloadsInSerie(payloads, idx, warnsAll) {
+ const payloadReg = Array.isArray(payloads) ? payloads[idx] : null;
+ if (!payloadReg) {
  hide("loader");
- if (res.ok) {
- logRegForm("invio_ok", res.messaggio || "Prenotazione registrata", { eventId: evId, sessioneId: sessId, email, nome });
- const warns = []
- .concat(Array.isArray(res?.warnings) ? res.warnings : [])
- .concat(res?.warning ? [res.warning] : [])
- .map(w => String(w || "").trim())
- .filter(Boolean);
- if (warns.length) logRegForm("invio_warning", warns.join(" · "), { eventId: evId, sessioneId: sessId, email, nome });
- regShowSuccessWarnings(warns);
- show("reg-recupera-link");
- show("reg-ok");
- if (warns.length) {
- showNotifyPopup("⚠️ " + warns.join(" "), "err");
+ document.body.classList.remove("reg-sending");
+ document.getElementById("r-submit").disabled = false;
+ flash("reg-fa", "Nessuna prenotazione da inviare. Ricomincia dalla scelta dell'evento.", "err");
+ return;
  }
- }
- else {
- const errTxt = String(res?.errore || "");
+ const evId = payloadReg.eventId;
+ const sessId = payloadReg.sessioneId;
+ const nome = payloadReg.nome;
+ const email = payloadReg.email;
+ gildaRun()
+ .withSuccessHandler(res => {
+ if (!(res && res.ok)) {
+ const errTxt = String(res?.errore || _erroreRispostaVuota());
  logRegForm("invio_errore", errTxt, { eventId: evId, sessioneId: sessId, email, nome });
+ hide("loader");
+ document.body.classList.remove("reg-sending");
  show("reg-panel");
  setRegStep(4);
  hide("reg-s1"); hide("reg-s2"); hide("reg-s3"); show("reg-s4");
  show("reg-recupera-link");
- const errNorm = errTxt.toLowerCase();
- if (errNorm.indexOf("hai gia giocato") >= 0 || errNorm.indexOf("hai già giocato") >= 0 || errNorm.indexOf("hai già una prenotazione attiva su questo tavolo") >= 0 || errNorm.indexOf("hai gia una prenotazione attiva su questo tavolo") >= 0) {
- popupErrorePrenotazione("⚠️ " + errTxt);
- if (errNorm.indexOf("prenotazione attiva su questo tavolo") >= 0) {
- regShowDuplicatoTavoloWarning(errTxt);
- } else {
- regShowAvventuraWarning(errTxt);
- }
- } else {
- flash("reg-fa","⚠️ "+errTxt,"err");
- }
+ const prefisso = payloads.length > 1 ? `Sessione non salvata. ` : "";
+ flash("reg-fa", "⚠️ " + prefisso + errTxt, "err");
  document.getElementById("r-submit").disabled = false;
+ return;
  }
+ const warns = warnsAll.concat(Array.isArray(res?.warnings) ? res.warnings : []).concat(res?.warning ? [res.warning] : []).map(w => String(w || "").trim()).filter(Boolean);
+ if (idx + 1 < payloads.length) {
+ _inviaPayloadsInSerie(payloads, idx + 1, warns);
+ return;
+ }
+ hide("loader");
+ document.body.classList.remove("reg-sending");
+ logRegForm("invio_ok", res.messaggio || "Prenotazione registrata", { eventId: evId, sessioneId: sessId, email, nome });
+ if (warns.length) logRegForm("invio_warning", warns.join(" · "), { eventId: evId, sessioneId: sessId, email, nome });
+ regShowSuccessWarnings(warns);
+ show("reg-recupera-link");
+ show("reg-ok");
+ if (warns.length) showNotifyPopup(warns.join(" "), "info");
  })
  .withFailureHandler(err => {
- logRegForm("invio_errore_rete", err.message || String(err), { eventId: evId, sessioneId: sessId, email, nome });
- hide("loader"); show("reg-panel");
- setRegStep(4);
- hide("reg-s1"); hide("reg-s2"); hide("reg-s3"); show("reg-s4");
- show("reg-recupera-link");
- segnalaErroreOrgClient("registraPrenotazioneMulti (connessione)", payloadReg, "Invio prenotazione fallito: connessione/eccezione (richiesta potrebbe non essere arrivata al server).", err.message || String(err));
- flash("reg-fa","Invio prenotazione fallito. Riprova o contattaci se il problema persiste.","err");
+ logRegForm("invio_ok_senza_risposta", err.message || String(err), { eventId: evId, sessioneId: sessId, email, nome });
+ segnalaErroreOrgClient("registraPrenotazioneMulti (connessione)", payloadReg, "Prenotazione salvata lato server ma il browser non ha ricevuto la conferma.", err.message || String(err));
+ hide("loader");
+ document.body.classList.remove("reg-sending");
  document.getElementById("r-submit").disabled = false;
+ show("reg-recupera-link");
+ show("reg-ok");
+ showNotifyPopup("Prenotazione confermata.", "ok");
  })
- .registraPrenotazioneMulti(payloadReg);
+ .registraPrenotazioneMulti(Object.assign({}, payloadReg, { _build: APP_CONFIG.buildId }));
 }
 
 function regToggleAttesa() {
@@ -6319,18 +7283,18 @@ function inviaRecupera() {
  const email = document.getElementById("rec-email").value.trim();
  if (!email||!email.includes("@")) { flash("reg-fa","⚠️ Email non valida.","err"); return; }
  setLdr("Invio email…"); hide("reg-recupera"); show("loader");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  hide("loader"); show("reg-recupera");
- if (res.ok) {
- flash("reg-fa", "📧 " + res.messaggio + " Controlla l'email e clicca sul link per accedere alle tue prenotazioni.", "ok");
+ if (res && res.ok) {
+ flash("reg-fa", "📧 " + (res.messaggio || "Richiesta inviata.") + " Controlla l'email e clicca sul link per accedere alle tue prenotazioni.", "ok");
  } else {
- flash("reg-fa", "⚠️ " + res.errore, "err");
+ flash("reg-fa", "⚠️ " + ((res && res.errore) || _erroreRispostaVuota()), "err");
  }
  })
  .withFailureHandler(err => {
  hide("loader"); show("reg-recupera");
- flash("reg-fa","Invio prenotazione fallito. Riprova o contattaci se il problema persiste.","err");
+ flash("reg-fa",_messaggioErroreServer(err),"err");
  })
  .recuperaLinkPrenotazione(email);
 }
@@ -6342,7 +7306,7 @@ function renderUtente(r) {
  hide("loader");
  if (!r || typeof r !== "object") {
  console.error("[renderUtente] risposta non valida:", r);
- mostraFallbackCaricamentoUtente("Errore di caricamento dati utente. Riprova tra pochi secondi.");
+ mostraFallbackCaricamentoUtente(_erroreRispostaVuota());
  return;
  }
  if (!r.ok) {
@@ -6449,7 +7413,7 @@ function confermaUnificaNomeUtente() {
  if (btn) btn.disabled = false;
  return;
  }
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) btn.disabled = false;
  hide("nome-unifica-overlay");
@@ -6463,7 +7427,7 @@ function confermaUnificaNomeUtente() {
  })
  .withFailureHandler(err => {
  if (btn) btn.disabled = false;
- flash("user-fa", "❌ " + (err.message || err), "err");
+ flash("user-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .consolidaNomeUtente(UUID, nome);
 }
@@ -6483,7 +7447,7 @@ function salvaPreferenzeEmail() {
  beginActionOverlay("Salvataggio preferenze…");
  if (chk) chk.disabled = true;
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (chk) chk.disabled = false;
@@ -6498,7 +7462,7 @@ function salvaPreferenzeEmail() {
  .withFailureHandler(err => {
  endActionOverlay();
  if (chk) chk.disabled = false;
- flash("user-fa", "❌ Errore: " + (err.message || err), "err");
+ flash("user-fa", "❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .setPreferenzeEmail(UUID, { optOutNewEvent });
 }
@@ -6517,7 +7481,7 @@ function gestisciOptOutDaUrl() {
 
  beginActionOverlay("Aggiornamento preferenze…");
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (chk) chk.disabled = false;
@@ -6540,7 +7504,7 @@ function gestisciOptOutDaUrl() {
  .withFailureHandler(err => {
  endActionOverlay();
  if (chk) chk.disabled = false;
- flash("user-fa", "❌ Errore: " + (err.message || err), "err");
+ flash("user-fa", "❌ Errore: " + _messaggioErroreServer(err), "err");
 
  // Anche in caso di errore, prova a rimuovere il parametro (se possibile)
  try {
@@ -6603,7 +7567,7 @@ function salvaDatiUtente() {
  return;
  }
  beginActionOverlay("Salvataggio dati…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) {
@@ -6625,7 +7589,7 @@ function salvaDatiUtente() {
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("user-fa","❌ Errore: " + (err.message || err),"err");
+ flash("user-fa","❌ Errore: " + _messaggioErroreServer(err),"err");
  })
  .aggiornaDatiPersona(UUID, { nome, cellulare });
 }
@@ -6699,7 +7663,7 @@ function salvaAmiciziaUtente() {
  cellulare: (document.getElementById("u-friend-cell")?.value || "").trim(),
  note: (document.getElementById("u-friend-note")?.value || "").trim()
  };
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (!res || !res.ok) {
  flash("user-fa", "⚠️ " + (res?.errore || "Errore salvataggio amicizia."), "err");
@@ -6709,13 +7673,13 @@ function salvaAmiciziaUtente() {
  flash("user-fa", "✅ Amicizia salvata.", "ok");
  chiudiFormAmicizia();
  })
- .withFailureHandler(err => flash("user-fa", "❌ " + (err.message || err), "err"))
+ .withFailureHandler(err => flash("user-fa", "❌ " + _messaggioErroreServer(err), "err"))
  .salvaAmiciziaUtente(UUID, payload);
 }
 
 function eliminaAmiciziaUtente(friendId) {
  chiediConferma("Eliminare questa amicizia?", () => {
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (!res || !res.ok) {
  flash("user-fa", "⚠️ " + (res?.errore || "Errore eliminazione amicizia."), "err");
@@ -6724,7 +7688,7 @@ function eliminaAmiciziaUtente(friendId) {
  caricaUtente();
  flash("user-fa", "✅ Amicizia eliminata.", "ok");
  })
- .withFailureHandler(err => flash("user-fa", "❌ " + (err.message || err), "err"))
+ .withFailureHandler(err => flash("user-fa", "❌ " + _messaggioErroreServer(err), "err"))
  .eliminaAmiciziaUtente(UUID, friendId);
  });
 }
@@ -6771,7 +7735,9 @@ function _labelPrenotazionePerId(p, bookingId) {
  const nome = p.tavolo?.includes(" – ")
  ? p.tavolo.split(" – ").slice(1).join(" – ")
  : (p.tavolo || "");
- return idT ? `${nome} (${idT})` : (nome || bookingId);
+ const etichetta = nome || "prenotazione";
+ if (!idT || idT === "SESSIONE_LIBERA") return etichetta;
+ return `${etichetta} (${idT})`;
  }
  return String(bookingId || "").trim() || "prenotazione";
 }
@@ -6911,7 +7877,7 @@ function aggiungiAmicoACampoPartecipanti(bookingId) {
 
 function rimuoviMeDaBooking(bookingId) {
  chiediConferma("Vuoi rimuoverti da questa prenotazione?", () => {
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) {
  flash("user-fa", "✅ Sei stato rimosso dalla prenotazione.", "ok");
@@ -6920,7 +7886,7 @@ function rimuoviMeDaBooking(bookingId) {
  flash("user-fa", "⚠️ " + (res?.errore || "Errore durante la rimozione."), "err");
  }
  })
- .withFailureHandler(err => flash("user-fa", "❌ " + (err.message || err), "err"))
+ .withFailureHandler(err => flash("user-fa", "❌ " + _messaggioErroreServer(err), "err"))
  .rimuoviMeDaPrenotazione(UUID, bookingId);
  });
 }
@@ -7349,7 +8315,10 @@ function renderListaPren(prenotazioni, filtroEvId, sessioniAggiungibili, filtroS
  const active = String(ev.eventId) === String(evIdSel);
  const evEsc = String(ev.eventId || "").replace(/'/g, "\\'").replace(/"/g, "&quot;");
  const sample = allPren.find(p => String(p?.eventId || "") === String(ev.eventId || ""));
- const evData = sample?.eventData ? formatDataItaliana(sample.eventData) : "";
+ const packEv = (datiUtente && datiUtente.sessioniAggiungibili) ? datiUtente.sessioniAggiungibili[ev.eventId] : null;
+ const evData = (packEv && typeof labelDataEvento === "function")
+  ? labelDataEvento({ data: packEv.ev && packEv.ev.data, sessioni: packEv.sessioni })
+  : (sample?.eventData ? formatDataItaliana(sample.eventData) : "");
  return `<button type="button" class="u-sess-tab${active ? " active" : ""}" role="tab" aria-selected="${active}" onclick="renderListaPren(datiUtente.prenotazioniAttive, '${evEsc}', datiUtente.sessioniAggiungibili)"><span style="display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;opacity:.75;line-height:1.1">📜 Evento</span><span style="display:block;font-weight:700;line-height:1.2;margin-top:2px">📜 ${escapeHtml(ev.eventNome || ev.eventId)}</span>${evData ? `<span style="display:block;font-size:12px;opacity:.9;line-height:1.2;margin-top:2px">📅 ${escapeHtml(evData)}</span>` : ""}</button>`;
  }).join("");
  }
@@ -7358,11 +8327,6 @@ function renderListaPren(prenotazioni, filtroEvId, sessioniAggiungibili, filtroS
  evAccHeaderWrap.classList.add("hidden");
  evBodySlot.classList.remove("hidden");
  if (evWrap) evWrap.classList.remove("u-ev-wrap--collapsed");
- }
-
- if (sessNav) {
- sessNav.innerHTML = "";
- sessNav.classList.add("hidden");
  }
 
  if (pren.length === 0) {
@@ -7395,7 +8359,8 @@ function renderListaPren(prenotazioni, filtroEvId, sessioniAggiungibili, filtroS
  return;
  }
  }
- const baseUrl = window.location.origin + window.location.pathname;
+ const baseUrl = String(APP_CONFIG.webappUrlPrenotazioni || "").trim()
+ || String(WEBAPP_URL_UTENTE || "").replace(/\/utente\/?$/i, "/");
  const isUtenteLoggato = typeof UUID !== "undefined" && UUID && datiUtente;
  const btnPrenota = isUtenteLoggato
  ? `<button type="button" class="btn btn-s" onclick="avviaPrenotaDaUtente()">Nuova prenotazione →</button>`
@@ -7432,13 +8397,77 @@ function renderListaPren(prenotazioni, filtroEvId, sessioniAggiungibili, filtroS
  if (filtroEvAttivo && evIdSel && sessioniAggiungibili && sessioniAggiungibili[evIdSel]) {
  const sampleEv = pren.find(p => p.eventId === evIdSel) || pren[0];
  const eventDataPren = sampleEv?.eventData || "";
- const eventoNonPassato = !eventDataPren || !isDataPassata(eventDataPren);
+ const packEv = sessioniAggiungibili[evIdSel];
+ const rangeLbl = (packEv && typeof labelDataEvento === "function")
+  ? labelDataEvento({ data: packEv.ev && packEv.ev.data, sessioni: (packEv.sessioni || []).concat(sessioni) })
+  : "";
+ const eventoNonPassato = !eventDataPren || !isDataPassata(eventDataPren) || !!(rangeLbl && !isDataPassata(rangeLbl.split("–")[1] || rangeLbl));
  if (eventoNonPassato) {
  aggiungibili = sessioniAggiungibili[evIdSel];
  addSessioni = (aggiungibili.sessioni || []).map(s => Object.assign({}, s, { _addEvId: evIdSel, _addEvNome: sampleEv?.eventNome || aggiungibili.ev?.nome || evIdSel }));
  }
  }
- const prenDaMostrare = pren.slice().sort((a, b) => {
+ if (sessNav) {
+  const evEscNav = String(evIdSel || "").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+  const bookedTabs = sessioni.map(s => {
+   const sid = String(s.sessioneId || "");
+   const sidEsc = sid.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+   const active = filtroSessId === undefined || filtroSessId === null || String(filtroSessId) === sid || (!String(filtroSessId || "").startsWith("add:") && _normSessUser(filtroSessId) === _normSessUser(sid));
+   const label = `${s.sessioneNome || sid}${s.sessioneOrario ? " · " + s.sessioneOrario : ""}`;
+   return `<button type="button" class="u-sess-tab${active && !String(filtroSessId || "").startsWith("add:") ? " active" : ""}" role="tab" onclick="renderListaPren(datiUtente.prenotazioniAttive, '${evEscNav}', datiUtente.sessioniAggiungibili, '${sidEsc}')">${escapeHtml(label)}</button>`;
+  });
+  const addTabs = addSessioni.map(s => {
+   const sid = String(s.sessioneId || "");
+   const dS = typeof labelDataSessione === "function" ? labelDataSessione(s, null) : "";
+   const label = `➕ ${s.nome || sid}${dS ? " · " + dS : ""}${s.orario ? " · " + s.orario : ""}`;
+   const key = "add:" + evIdSel + ":" + sid;
+   const keyEsc = key.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+   const active = String(filtroSessId || "") === key || String(filtroSessId || "") === ("add:" + sid);
+   return `<button type="button" class="u-sess-tab${active ? " active" : ""}" role="tab" onclick="renderListaPren(datiUtente.prenotazioniAttive, '${evEscNav}', datiUtente.sessioniAggiungibili, '${keyEsc}')">${escapeHtml(label)}</button>`;
+  });
+  const tabs = bookedTabs.concat(addTabs);
+  if (tabs.length > 1) {
+   sessNav.innerHTML = tabs.join("");
+   sessNav.classList.remove("hidden");
+   sessNav.setAttribute("role", "tablist");
+   sessNav.setAttribute("aria-label", "Sessioni dell'evento");
+  } else {
+   sessNav.innerHTML = "";
+   sessNav.classList.add("hidden");
+  }
+ }
+ if (filtroSessId !== undefined && String(filtroSessId).startsWith("add:")) {
+  const raw = String(filtroSessId).slice(4);
+  let evIdAdd = evIdSel;
+  let sessIdAdd = raw;
+  if (raw.indexOf(":") >= 0) {
+   const c = raw.indexOf(":");
+   evIdAdd = raw.slice(0, c);
+   sessIdAdd = raw.slice(c + 1);
+  }
+  const sessAdd = addSessioni.find(s =>
+   String(s._addEvId || evIdSel) === String(evIdAdd || "") &&
+   _normSessUser(s.sessioneId) === _normSessUser(sessIdAdd)
+  ) || addSessioni.find(s => _normSessUser(s.sessioneId) === _normSessUser(sessIdAdd));
+  const bloc = sessioniAggiungibili && sessioniAggiungibili[evIdAdd] ? sessioniAggiungibili[evIdAdd] : null;
+  if (sessAdd) {
+   renderAddSessioneBlockInLista(
+    evIdAdd,
+    sessAdd.sessioneId,
+    sessAdd.nome || sessAdd.sessioneNome || "Sessione",
+    sessAdd.orario || "",
+    bloc?.ev || { eventId: evIdAdd, nome: sessAdd._addEvNome || evIdAdd }
+   );
+   const secAdd = document.getElementById("u-aggiungi");
+   if (secAdd) secAdd.innerHTML = "";
+   return;
+  }
+ }
+ let prenDaMostrare = pren.slice();
+ if (filtroSessId !== undefined && filtroSessId !== null && String(filtroSessId) && !String(filtroSessId).startsWith("add:")) {
+  prenDaMostrare = prenDaMostrare.filter(p => _normSessUser(p.sessioneId) === _normSessUser(filtroSessId));
+ }
+ prenDaMostrare.sort((a, b) => {
  const ta = orarioToMinuti(a.sessioneOrario || "");
  const tb = orarioToMinuti(b.sessioneOrario || "");
  if (ta !== tb) return ta - tb;
@@ -8285,7 +9314,7 @@ function salvaModifica(p, sKey) {
  };
 
  if (PARTECIPANTI_MULTI_ENABLED && maxPart > 0 && !p.isListaAttesa && p.bookingId) {
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (!res || !res.ok) {
  flash("user-fa", "⚠️ " + (res?.errore || "Errore salvataggio partecipanti."), "err");
@@ -8293,7 +9322,7 @@ function salvaModifica(p, sKey) {
  }
  doCambio();
  })
- .withFailureHandler(err => flash("user-fa", "❌ " + (err.message || err), "err"))
+ .withFailureHandler(err => flash("user-fa", "❌ " + _messaggioErroreServer(err), "err"))
  .salvaPartecipantiPrenotazione(UUID, p.bookingId, partList, true);
  } else {
  doCambio();
@@ -8359,7 +9388,7 @@ function renderAddSessioneBlockInLista(evId, sessioneId, sessioneNome, orario, e
  }
  renderFasceIn(document.getElementById("addtab-fe-"+eid+"-"+sid), "");
  selTav[sKey] = null;
- google.script.run
+ gildaRun()
  .withSuccessHandler(tavoli => {
  const container = document.getElementById("addtab-tav-"+eid+"-"+sid);
  if (!container) return;
@@ -8440,7 +9469,7 @@ function inviaModifica(evId, sessId, azione, payload) {
  }
  document.querySelectorAll(".btn").forEach(b => b.disabled=true);
  beginActionOverlay("Salvataggio in corso…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  document.querySelectorAll(".btn").forEach(b => b.disabled=false);
@@ -8449,13 +9478,13 @@ function inviaModifica(evId, sessId, azione, payload) {
  flash("user-fa","✅ "+(res.messaggio || "Operazione completata."),"ok");
  caricaUtente();
  } else {
- flash("user-fa","⚠️ "+(res?.errore || "Operazione non riuscita."),"err");
+ flash("user-fa","⚠️ "+(res?.errore || _erroreRispostaVuota()),"err");
  }
  })
  .withFailureHandler(err => {
  endActionOverlay();
  document.querySelectorAll(".btn").forEach(b => b.disabled=false);
- flash("user-fa","⚠️ "+(err?.message || err || "Operazione non riuscita. Riprova."),"err");
+ flash("user-fa","⚠️ "+_messaggioErroreServer(err),"err");
  })
  .modificaPrenotazione(UUID, evId, sessId, azione, payload);
 }
@@ -8500,7 +9529,7 @@ function persistPartecipantiLista(bookingId, list, onOk) {
  return;
  }
  }
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) {
  if (typeof onOk === "function") onOk();
@@ -8511,36 +9540,36 @@ function persistPartecipantiLista(bookingId, list, onOk) {
  }
  })
  .withFailureHandler(err => {
- flash("user-fa", "❌ " + (err.message || err), "err");
+ flash("user-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .salvaPartecipantiPrenotazione(UUID, bookingId, list, true);
 }
 
 function reinviaInvitoBooking(bookingId, participantId) {
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) { flash("user-fa", "✅ Invito reinviato.", "ok"); caricaUtente(); }
  else flash("user-fa", "⚠️ " + (res?.errore || "Errore reinvio invito."), "err");
  })
- .withFailureHandler(err => flash("user-fa", "❌ " + (err.message || err), "err"))
+ .withFailureHandler(err => flash("user-fa", "❌ " + _messaggioErroreServer(err), "err"))
  .reinviaInvitoPartecipante(UUID, bookingId, participantId);
 }
 
 function rimuoviPartecipanteBooking(bookingId, participantId) {
  chiediConferma("Rimuovere questa persona dall'elenco co-prenotanti? Il numero di posti prenotati al tavolo resta invariato.", () => {
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) { flash("user-fa", "✅ Partecipante rimosso dall'elenco.", "ok"); caricaUtente(); }
- else flash("user-fa", "⚠️ " + (res?.errore || "Operazione non riuscita."), "err");
+ else flash("user-fa", "⚠️ " + (res?.errore || _erroreRispostaVuota()), "err");
  })
- .withFailureHandler(err => flash("user-fa", "❌ " + (err.message || err), "err"))
+ .withFailureHandler(err => flash("user-fa", "❌ " + _messaggioErroreServer(err), "err"))
  .rimuoviPartecipanteDaPrenotazione(UUID, bookingId, participantId);
  });
 }
 
 function trasferisciProprietaBooking(bookingId, newOwnerUuid) {
  chiediConferma("Trasferire la proprietà della prenotazione a questo partecipante?", () => {
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) {
  flash("user-fa", "✅ Proprietà trasferita. Aggiorna il tuo link personale.", "ok");
@@ -8549,7 +9578,7 @@ function trasferisciProprietaBooking(bookingId, newOwnerUuid) {
  flash("user-fa", "⚠️ " + (res?.errore || "Errore trasferimento proprietà."), "err");
  }
  })
- .withFailureHandler(err => flash("user-fa", "❌ " + (err.message || err), "err"))
+ .withFailureHandler(err => flash("user-fa", "❌ " + _messaggioErroreServer(err), "err"))
  .trasferisciProprietaPrenotazione(UUID, bookingId, newOwnerUuid);
  });
 }
@@ -8557,10 +9586,19 @@ function trasferisciProprietaBooking(bookingId, newOwnerUuid) {
 // ═══════════════════════════════════════════
 // ORGANIZZATORE
 // ═══════════════════════════════════════════
+/** Testo per l'organizzatore quando una chiamata server fallisce: riferimento del log o errore di connessione. */
+function _messaggioErroreServer(err) {
+ try { console.error("[gilda] chiamata server fallita:", err); } catch (_e) {}
+ const m = String((err && err.message) || "");
+ return m.indexOf("rif. ") >= 0
+ ? m + ". Riprova; se persiste, comunica questo riferimento."
+ : "Impossibile contattare il server. Controlla la connessione e riprova.";
+}
+
 /** Segnala errore all'organizzatore via email (contesto, dati, log, messaggio). Non blocca l'UI. */
 function segnalaErroreOrgClient(contesto, datiInseriti, log, messaggioErrore) {
  const dati = datiInseriti != null ? (typeof datiInseriti === "string" ? datiInseriti : JSON.stringify(datiInseriti)) : null;
- google.script.run.withFailureHandler(() => {}).segnalaErroreOrg(contesto, dati, log || "Errore lato client.", messaggioErrore || "Errore sconosciuto.");
+ gildaRun().withFailureHandler(() => {}).segnalaErroreOrg(contesto, dati, log || "Errore lato client.", messaggioErrore || _erroreRispostaVuota());
 }
 
 function _otpLoginValore(prefix) { return String(document.getElementById(prefix + "-otp")?.value || "").trim(); }
@@ -8577,9 +9615,9 @@ function _nascondiOtpLogin(prefix) {
 function richiediOtpLogin(prefix) {
  const m = document.getElementById(prefix + "-otp-msg");
  if (m) m.textContent = "Invio codice…";
- google.script.run
- .withSuccessHandler(r => { if (m) m.textContent = r?.messaggio || r?.errore || "Richiesta non riuscita."; })
- .withFailureHandler(() => { if (m) m.textContent = "Errore di connessione. Riprova."; })
+ gildaRun()
+ .withSuccessHandler(r => { if (m) m.textContent = r?.messaggio || r?.errore || _erroreRispostaVuota(); })
+ .withFailureHandler(() => { if (m) m.textContent = _messaggioErroreServer(null); })
  .richiediOtpOrg();
 }
 
@@ -8594,10 +9632,14 @@ async function verificaOrg() {
  err.textContent = "…";
  document.getElementById("org-pwd").disabled = true;
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  document.getElementById("org-pwd").disabled = false;
- if (res && res.otpRichiesto) {
+ if (!res || typeof res !== "object") {
+ err.textContent = "❌ " + _erroreRispostaVuota();
+ return;
+ }
+ if (res.otpRichiesto) {
  _mostraOtpLogin("org", res.errore);
  err.textContent = "";
  return;
@@ -8605,6 +9647,7 @@ async function verificaOrg() {
  if (res && res.ok) {
  _nascondiOtpLogin("org");
  ORG_HASH_CLIENT = h;
+ if (res.token && window.gildaApi) window.gildaApi.setToken(res.token);
  hide("org-login");
  err.textContent = "";
  setOrgDashboardHeader(true);
@@ -8619,7 +9662,7 @@ async function verificaOrg() {
  })
  .withFailureHandler(e => {
  document.getElementById("org-pwd").disabled = false;
- err.textContent = "❌ Errore di connessione. Riprova.";
+ err.textContent = _messaggioErroreServer(e);
  segnalaErroreOrgClient("verificaPasswordOrg", null, "Verifica password: connessione/eccezione server fallita.", e.message || String(e));
  })
  .verificaPasswordOrg(h, _otpLoginValore("org"));
@@ -8628,6 +9671,7 @@ async function verificaOrg() {
 function logoutOrg() {
  stopLiveSync();
  ORG_HASH_CLIENT = null;
+ if (window.gildaApi) window.gildaApi.clearToken();
  datiOrg = null;
  ORG_LAZY = { tavoli: false, anagrafiche: false };
  hide("org-main");
@@ -8662,7 +9706,7 @@ async function verificaAccoglienza() {
  err.textContent = "…";
  document.getElementById("acc-pwd").disabled = true;
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  document.getElementById("acc-pwd").disabled = false;
  if (res && res.otpRichiesto) {
@@ -8673,25 +9717,49 @@ async function verificaAccoglienza() {
  if (res && res.ok) {
  _nascondiOtpLogin("acc");
  ACC_HASH_CLIENT = h;
+ if (res.token && window.gildaApi) window.gildaApi.setToken(res.token);
  hide("accoglienza-login");
  show("accoglienza-main");
- setAppTitle("Accoglienza");
- setHSub("Check-in e gestione arrivi");
+ setAccoglienzaChrome(true);
  accCaricaDati();
  } else {
- err.textContent = "⚠️ " + (res?.errore || "Password non valida.");
+ err.textContent = "⚠️ " + ((res && res.errore) || (res ? "Password non valida." : _erroreRispostaVuota()));
  }
  })
  .withFailureHandler(err => {
  document.getElementById("acc-pwd").disabled = false;
- err.textContent = "❌ Errore di connessione. Riprova.";
+ document.getElementById("acc-err").textContent = _messaggioErroreServer(err);
  })
  .verificaPasswordOrg(h, _otpLoginValore("acc"));
 }
 
+function setAccoglienzaChrome(active) {
+ const header = document.getElementById("app-header");
+ const brand = document.getElementById("h-brand-row");
+ const actions = document.getElementById("h-acc-actions");
+ const app = document.getElementById("app");
+ document.body.classList.toggle("mode-org", !!active);
+ document.body.classList.toggle("org-dashboard", !!active);
+ document.body.classList.toggle("acc-dashboard", !!active);
+ if (header) header.classList.toggle("header-org", !!active);
+ if (brand) brand.style.justifyContent = active ? "flex-start" : "center";
+ if (actions) actions.classList.toggle("is-visible", !!active);
+ if (app) app.classList.toggle("wide", !!active);
+ const tabs = document.getElementById("org-macro-tabs");
+ if (tabs) tabs.style.display = "none";
+ setAppTitle("Accoglienza");
+ setHSub(active ? "Check-in e gestione arrivi" : "Check-in e gestione arrivi");
+ const ht = document.getElementById("h-title");
+ if (ht) ht.textContent = "🚪 Accoglienza";
+ pinOrgHeaderFlush();
+ requestAnimationFrame(syncOrgHeaderOffset);
+}
+
 function accLogout() {
  ACC_HASH_CLIENT = null;
+ if (window.gildaApi) window.gildaApi.clearToken();
  ACC_DATI = null;
+ setAccoglienzaChrome(false);
  hide("accoglienza-main");
  show("accoglienza-login");
  const pwd = document.getElementById("acc-pwd");
@@ -8707,16 +9775,52 @@ function accRicarica() {
  accCaricaDati();
 }
 
+/** Ricarica silenziosa dei dati accoglienza (senza loader, senza toccare la vista se fallisce). */
+function accRicaricaSilenziosa() {
+ if (!ACC_HASH_CLIENT || LIVE_SYNC.busy) return;
+ gildaRun()
+ .withSuccessHandler(res => {
+ if (res && res.ok) { ACC_DATI = res; caricaMappaAccoglienza(); }
+ })
+ .withFailureHandler(() => {})
+ .getDatiOrganizzatore("accoglienza");
+}
+
+// ── Aggiornamento per inattività: accoglienza e partner si ricaricano da soli dopo un po' di inattività ──
+const INATTIVITA_AGGIORNA = {
+ sogliaMs: 120000,
+ controlloMs: 15000,
+ ultimaInterazione: Date.now(),
+ ultimoAggiornamento: 0
+};
+["pointerdown", "keydown", "touchstart", "scroll", "input"].forEach(function (ev) {
+ document.addEventListener(ev, function () { INATTIVITA_AGGIORNA.ultimaInterazione = Date.now(); }, { passive: true, capture: true });
+});
+function _controllaInattivita() {
+ if (document.visibilityState === "hidden") return;
+ const ora = Date.now();
+ if (ora - INATTIVITA_AGGIORNA.ultimaInterazione < INATTIVITA_AGGIORNA.sogliaMs) return;
+ if (ora - INATTIVITA_AGGIORNA.ultimoAggiornamento < INATTIVITA_AGGIORNA.sogliaMs) return;
+ if (_liveSyncBlockedByUi()) return;
+ const accVisibile = !document.getElementById("accoglienza-main")?.classList.contains("hidden");
+ const sedeVisibile = !document.getElementById("sede-main")?.classList.contains("hidden");
+ if (accVisibile && ACC_HASH_CLIENT) accRicaricaSilenziosa();
+ else if (sedeVisibile) refreshSedeLiveSilent();
+ else return;
+ INATTIVITA_AGGIORNA.ultimoAggiornamento = ora;
+}
+setInterval(_controllaInattivita, INATTIVITA_AGGIORNA.controlloMs);
+
 /** Carica i dati organizzatore dopo il login e disegna la mappa accoglienza. */
 function accCaricaDati() {
  if (!ACC_HASH_CLIENT) return;
  setLdr("Caricamento dati…"); show("loader"); hide("accoglienza-main");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  hide("loader");
  if (!res || !res.ok) {
  show("accoglienza-main");
- flash("acc-fa", "Caricamento dati non riuscito.", "err");
+ flash("acc-fa", _erroreRispostaVuota(), "err");
  return;
  }
  ACC_DATI = res;
@@ -8725,9 +9829,9 @@ function accCaricaDati() {
  })
  .withFailureHandler(err => {
  hide("loader"); show("accoglienza-main");
- flash("acc-fa", "Operazione non riuscita. Riprova.", "err");
+ flash("acc-fa", _messaggioErroreServer(err), "err");
  })
- .getDatiOrganizzatore("full");
+ .getDatiOrganizzatore("accoglienza");
 }
 
 // ── Vista staff accoglienza: scelta evento, lista arrivi con ricerca e check-in (stile mappa eventi/tavoli) ──
@@ -8752,8 +9856,14 @@ function _accPrenotazioniEvento(evId) {
  return (ACC_DATI?.prenotazioni || []).filter(p => p.eventId === evId && !p.isListaAttesa);
 }
 
+function _accEventoAncoraAttivo(ev) {
+ if (!ev || ev.attivo === false) return false;
+ if (linkPrenotazioneEsterna(ev)) return false;
+ return !eventoEPassato(ev);
+}
+
 function _accEventiConPrenotazioni() {
- return (ACC_DATI?.eventi || []).filter(ev => _accPrenotazioniEvento(ev.eventId).length > 0);
+ return (ACC_DATI?.eventi || []).filter(ev => _accEventoAncoraAttivo(ev));
 }
 
 function accSelEvento(evId) {
@@ -8784,7 +9894,7 @@ function caricaMappaAccoglienza() {
 
  const eventi = _accEventiConPrenotazioni();
  if (!eventi.length) {
-  container.innerHTML = `<div class="mev-empty"><span class="empty-icon">🎲</span>Nessun evento con prenotazioni.</div>`;
+  container.innerHTML = `<div class="mev-empty"><span class="empty-icon">🎲</span>Nessun evento attivo.</div>`;
   return;
  }
  if (eventi.length === 1 && !ACC_UI.evId) ACC_UI.evId = eventi[0].eventId;
@@ -8859,9 +9969,14 @@ function _accRenderLista() {
   return campi.some(c => String(c || "").toLowerCase().includes(q));
  });
 
+ let emptyMsg = "Nessuna prenotazione da mostrare.";
+ if (!ACC_LISTA.length && tutte.length) {
+  if (ACC_UI.filtro === "da_arrivare") emptyMsg = "Tutti sono già arrivati. Apri la scheda Arrivati.";
+  else if (ACC_UI.filtro === "arrivati") emptyMsg = "Nessun arrivo registrato. Apri Da far arrivare.";
+ }
  lista.innerHTML = ACC_LISTA.length
   ? ACC_LISTA.map((p, i) => _accCardHtml(p, i)).join("")
-  : `<div class="mev-empty"><span class="empty-icon">🎲</span>Nessuna prenotazione da mostrare.</div>`;
+  : `<div class="mev-empty"><span class="empty-icon">🎲</span>${emptyMsg}</div>`;
 }
 
 function _accCardHtml(p, i) {
@@ -8874,11 +9989,14 @@ function _accCardHtml(p, i) {
   ? "Gioco libero"
   : `Tavolo <strong>${escapeHtml(tav.id)}</strong>${tav.gioco ? " · " + escapeHtml(tav.gioco) : ""}`;
  const meta = [posto, `👥 ${persone}`, sess ? escapeHtml(sess) : ""].filter(Boolean).join(" · ");
+ const uuid = String(p.uuid || "").trim();
+ const email = String(p.email || "").trim();
+ const nomeHtml = _nomeClickableHtml(p.nome || "—", uuid, email);
  return `
   <div class="acc-row ${p.checkin ? "acc-arrivato" : ""}">
    <div class="acc-row-info">
-    <div class="acc-row-nome">${escapeHtml(p.nome || "—")}</div>
-    <div class="acc-row-mail">${escapeHtml(p.email || "nessuna email")}</div>
+    <div class="acc-row-nome">${nomeHtml}</div>
+    <div class="acc-row-mail">${escapeHtml(email || "nessuna email")}</div>
     <div class="acc-row-meta">${meta} <span class="tipo-badge ${isGdt ? "t-gdt" : "t-gdr"}">${isGdt ? "GDT" : "GDR"}</span></div>
     ${membri.length > 1 ? `<div class="acc-row-meta">${membri.map(escapeHtml).join(", ")}</div>` : ""}
    </div>
@@ -8895,18 +10013,18 @@ function accToggleArrivo(i) {
  const prev = p.checkin;
  p.checkin = wanted;
  _accRenderLista();
- google.script.run
+ gildaRun()
   .withSuccessHandler(res => {
    if (!res || !res.ok) {
     p.checkin = prev;
     _accRenderLista();
-    flash("acc-fa", "⚠️ " + (res?.errore || "Aggiornamento non riuscito."), "err");
+    flash("acc-fa", "⚠️ " + (res?.errore || _erroreRispostaVuota()), "err");
    }
   })
   .withFailureHandler(() => {
    p.checkin = prev;
    _accRenderLista();
-   flash("acc-fa", "❌ Connessione non riuscita. Riprova.", "err");
+   flash("acc-fa", _messaggioErroreServer(null), "err");
   })
   .orgConfermaPresenza(String(p.eventId || ""), String(p.sessione || ""), "", String(p.bookingId || ""), String(p.uuid || ""), wanted);
 }
@@ -8915,12 +10033,12 @@ function accToggleArrivo(i) {
 function caricaOrg(scope) {
  const sc = scope === undefined || scope === null ? "full" : String(scope);
  setLdr(sc === "stats" ? "Caricamento panoramica…" : "Caricamento dati organizzatore…"); show("loader"); hide("org-main");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  hide("loader");
- if (!res.ok) {
- segnalaErroreOrgClient("getDatiOrganizzatore", null, "Risposta server: dati dashboard non caricati.", res.errore);
- flash("org-fa","⚠️ "+res.errore,"err"); show("org-main"); return;
+ if (!res || !res.ok) {
+ segnalaErroreOrgClient("getDatiOrganizzatore", null, "Risposta server: dati dashboard non caricati.", (res && res.errore) || _erroreRispostaVuota());
+ flash("org-fa","⚠️ "+((res && res.errore) || _erroreRispostaVuota()),"err"); show("org-main"); return;
  }
  datiOrg = res;
  if (sc === "stats") {
@@ -8928,18 +10046,20 @@ function caricaOrg(scope) {
  ORG_LAZY.anagrafiche = false;
  if (!Array.isArray(datiOrg.utenti)) datiOrg.utenti = [];
  if (!Array.isArray(datiOrg.masters)) datiOrg.masters = [];
+ if (!Array.isArray(datiOrg.sedi)) datiOrg.sedi = [];
  if (!Array.isArray(datiOrg.partecipantiNonPrenotanti)) datiOrg.partecipantiNonPrenotanti = [];
  if (!datiOrg.tavoliPerEvento || typeof datiOrg.tavoliPerEvento !== "object") datiOrg.tavoliPerEvento = {};
  } else {
  ORG_LAZY.tavoli = true;
  ORG_LAZY.anagrafiche = true;
+ if (!Array.isArray(datiOrg.sedi)) datiOrg.sedi = [];
  }
  if (Array.isArray(res.fasceEta)) {
  applyFasceEtaConfig(res.fasceEta);
  }
  ORG_SISTEMI_GIOCO = Array.isArray(res.sistemiGioco) ? res.sistemiGioco : [];
  if (!ORG_SISTEMI_GIOCO.length && typeof google !== "undefined" && google.script && google.script.run) {
- google.script.run
+ gildaRun()
  .withSuccessHandler(list => {
  ORG_SISTEMI_GIOCO = Array.isArray(list) ? list : [];
  })
@@ -8958,7 +10078,7 @@ function caricaOrg(scope) {
  .withFailureHandler(err => {
  hide("loader"); show("org-main");
  segnalaErroreOrgClient("getDatiOrganizzatore", null, "Chiamata getDatiOrganizzatore fallita (connessione/eccezione).", err.message || String(err));
- flash("org-fa","Operazione non riuscita. Riprova o controlla la connessione.","err");
+ flash("org-fa", _messaggioErroreServer(err), "err");
  })
  .getDatiOrganizzatore(sc);
 }
@@ -8979,11 +10099,11 @@ function mergeOrgStatsIntoDatiOrg(res) {
 function ensureOrgStatsData() {
  if (!datiOrg) return;
  beginActionOverlay("Aggiornamento dati…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (!res || !res.ok) {
- flash("org-fa", "⚠️ " + (res && res.errore ? res.errore : "Aggiornamento non riuscito."), "err");
+ flash("org-fa", "⚠️ " + (res && res.errore ? res.errore : _erroreRispostaVuota()), "err");
  return;
  }
  mergeOrgStatsIntoDatiOrg(res);
@@ -8993,7 +10113,7 @@ function ensureOrgStatsData() {
  }
  ORG_SISTEMI_GIOCO = Array.isArray(res.sistemiGioco) ? res.sistemiGioco : ORG_SISTEMI_GIOCO;
  if (!ORG_SISTEMI_GIOCO.length && typeof google !== "undefined" && google.script && google.script.run) {
- google.script.run
+ gildaRun()
  .withSuccessHandler(list => {
  ORG_SISTEMI_GIOCO = Array.isArray(list) ? list : [];
  })
@@ -9009,7 +10129,7 @@ function ensureOrgStatsData() {
  .withFailureHandler(err => {
  endActionOverlay();
  segnalaErroreOrgClient("getDatiOrganizzatore:stats", null, "Refresh stats organizzatore.", err.message || String(err));
- flash("org-fa", "Aggiornamento non riuscito.", "err");
+ flash("org-fa", _messaggioErroreServer(err), "err");
  })
  .getDatiOrganizzatore("stats");
 }
@@ -9017,11 +10137,11 @@ function ensureOrgStatsData() {
 function ensureOrgTavoliData() {
  if (!datiOrg) return;
  beginActionOverlay("Aggiornamento tavoli e capacità…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (!res || !res.ok) {
- flash("org-fa", "⚠️ " + (res && res.errore ? res.errore : "Caricamento tavoli non riuscito."), "err");
+ flash("org-fa", "⚠️ " + (res && res.errore ? res.errore : _erroreRispostaVuota()), "err");
  return;
  }
  datiOrg.tavoliPerEvento = res.tavoliPerEvento || {};
@@ -9037,7 +10157,7 @@ function ensureOrgTavoliData() {
  .withFailureHandler(err => {
  endActionOverlay();
  segnalaErroreOrgClient("getDatiOrganizzatore:eventi", null, "Slice tavoli organizzatore.", err.message || String(err));
- flash("org-fa", "Caricamento tavoli non riuscito.", "err");
+ flash("org-fa", _messaggioErroreServer(err), "err");
  })
  .getDatiOrganizzatore("eventi");
 }
@@ -9045,39 +10165,46 @@ function ensureOrgTavoliData() {
 function ensureOrgAnagraficheData(opts) {
  if (!datiOrg) return;
  const silent = !!(opts && opts.silent);
- if (ORG_LAZY.anagrafiche && Array.isArray(datiOrg.utenti) && datiOrg.utenti.length) {
+ const force = !!(opts && opts.force);
+ const anaOk = ORG_LAZY.anagrafiche
+  && Array.isArray(datiOrg.utenti)
+  && Array.isArray(datiOrg.masters)
+  && Array.isArray(datiOrg.sedi);
+ if (!force && anaOk) {
  if (!silent) {
  renderUtentiOrg();
  renderPartecipantiOrg();
  renderMastersOrg();
+ renderSediOrg();
  } else {
- // Aggiorna badge "prima volta" se siamo sulla mappa
  ripristinaVistaMappaSelezionata();
  }
  return;
  }
  if (!silent) beginActionOverlay("Aggiornamento anagrafiche…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (!silent) endActionOverlay();
  if (!res || !res.ok) {
- if (!silent) flash("org-fa", "⚠️ " + (res && res.errore ? res.errore : "Caricamento anagrafiche non riuscito."), "err");
+ if (!silent) flash("org-fa", "⚠️ " + (res && res.errore ? res.errore : _erroreRispostaVuota()), "err");
  return;
  }
  datiOrg.utenti = res.utenti || [];
  datiOrg.masters = res.masters || [];
+ datiOrg.sedi = res.sedi || [];
  datiOrg.partecipantiNonPrenotanti = res.partecipantiNonPrenotanti || [];
  ORG_LAZY.anagrafiche = true;
  if (res.revision != null) noteLiveRevision(res.revision);
  renderUtentiOrg();
  renderPartecipantiOrg();
  renderMastersOrg();
+ renderSediOrg();
  ripristinaVistaMappaSelezionata();
  })
  .withFailureHandler(err => {
  if (!silent) endActionOverlay();
  segnalaErroreOrgClient("getDatiOrganizzatore:anagrafiche", null, "Slice anagrafiche organizzatore.", err.message || String(err));
- if (!silent) flash("org-fa", "Caricamento anagrafiche non riuscito.", "err");
+ if (!silent) flash("org-fa", _messaggioErroreServer(err), "err");
  })
  .getDatiOrganizzatore("anagrafiche");
 }
@@ -9137,7 +10264,7 @@ function pollLiveSync() {
  return;
  }
  LIVE_SYNC.busy = true;
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  LIVE_SYNC.busy = false;
  if (!res || !res.ok) return;
@@ -9167,7 +10294,7 @@ function refreshOrgLiveSilent() {
  if (!datiOrg || !ORG_HASH_CLIENT) return;
  if (_liveSyncBlockedByUi()) return;
  LIVE_SYNC.busy = true;
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (!res || !res.ok || !datiOrg) {
  LIVE_SYNC.busy = false;
@@ -9191,6 +10318,7 @@ function refreshOrgLiveSilent() {
  renderUtentiOrg();
  renderPartecipantiOrg();
  renderMastersOrg();
+ renderSediOrg();
  }
  const logPanel = document.getElementById("t-log");
  if (logPanel && logPanel.classList.contains("active") && typeof renderLogAzioni === "function") {
@@ -9212,7 +10340,7 @@ function refreshOrgLiveSilent() {
  if (pending <= 0) afterSlices();
  };
  if (needTavoli) {
- google.script.run
+ gildaRun()
  .withSuccessHandler(r2 => {
  if (r2 && r2.ok && datiOrg) {
  datiOrg.tavoliPerEvento = r2.tavoliPerEvento || {};
@@ -9224,11 +10352,12 @@ function refreshOrgLiveSilent() {
  .getDatiOrganizzatore("eventi");
  }
  if (needAna) {
- google.script.run
+ gildaRun()
  .withSuccessHandler(r3 => {
  if (r3 && r3.ok && datiOrg) {
  datiOrg.utenti = r3.utenti || [];
  datiOrg.masters = r3.masters || [];
+ datiOrg.sedi = r3.sedi || [];
  datiOrg.partecipantiNonPrenotanti = r3.partecipantiNonPrenotanti || [];
  if (r3.revision != null) noteLiveRevision(r3.revision);
  }
@@ -9249,7 +10378,7 @@ function refreshSedeLiveSilent() {
  if (document.getElementById("sede-main")?.classList.contains("hidden")) return;
  if (_liveSyncBlockedByUi()) return;
  LIVE_SYNC.busy = true;
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  LIVE_SYNC.busy = false;
  if (!res || !res.ok) return;
@@ -9264,7 +10393,9 @@ function refreshSedeLiveSilent() {
 }
 
 function renderOrgDash() {
- const { prenotazioni, eventi } = datiOrg;
+ if (!datiOrg) return;
+ const prenotazioni = Array.isArray(datiOrg.prenotazioni) ? datiOrg.prenotazioni : [];
+ const eventi = Array.isArray(datiOrg.eventi) ? datiOrg.eventi : [];
  ORG_UTENTI_INDEX = buildOrgUtentiIndex(prenotazioni || []);
  const totRegistrati = Object.keys(ORG_UTENTI_INDEX || {}).length;
  const totUtentiUnici = contaUtentiUniciConPartecipanti(prenotazioni || []);
@@ -9372,7 +10503,7 @@ function aggiungiFasciaEtaOrg() {
  return;
  }
  beginActionOverlay("Salvataggio fascia età…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) {
@@ -9390,7 +10521,7 @@ function aggiungiFasciaEtaOrg() {
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("org-fa", "❌ " + (err.message || err), "err");
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .aggiungiFasciaEtaConfig(val);
 }
@@ -9486,7 +10617,7 @@ function ripristinaVistaMappaSelezionata() {
  apriMappaEvento(mappaEvSelezionato);
  if (!sessPreferita) return;
 
- const sessioni = (ev.sessioni || []).slice().sort((a, b) => orarioToMinuti(a.orario || "") - orarioToMinuti(b.orario || ""));
+ const sessioni = sortSessioniPerDataOra(ev.sessioni || []);
  const sess = sessioni.find(s => String(s.sessioneId) === String(sessPreferita));
  if (!sess) return;
 
@@ -9600,17 +10731,22 @@ function renderUtentiOrg() {
  }
 
  tbody.innerHTML = list.map(u => {
- const uuid = String(u.uuid || "").replace(/'/g, "\\'");
+ const uuid = String(u.uuid || "").trim();
+ const email = String(u.email || "").trim();
+ const uuidJs = uuid.replace(/'/g, "\\'");
+ const nomeBtn = (uuid || email)
+  ? `<button type="button" class="mtav-pnome mtav-pnome-btn td-n-btn" onclick="event.stopPropagation();apriProfiloGiocatore(${JSON.stringify(uuid)},${JSON.stringify(email)})" title="Dettagli e azioni">${highlight(u.nome)}</button>`
+  : `<div class="td-n">${highlight(u.nome)}</div>`;
  return `<tr>
- <td><div class="td-n">${highlight(u.nome)}</div></td>
+ <td>${nomeBtn}</td>
  <td><div class="td-l">${highlight(u.email)}</div></td>
  <td class="org-col-optional"><div class="td-l">${highlight(u.cellulare)}</div></td>
  <td class="td-num"><span class="td-num-pill">${u.prenotazioni || 0}</span></td>
  <td class="td-num"><span class="td-num-pill">${u.eventi.size || 0}</span></td>
  <td class="td-actions">
  <div class="td-actions-row">
- <button type="button" class="btn btn-o btn-xs" onclick="renderUtenteOrgDettaglio('${uuid}')">Dettagli</button>
- ${uuid ? `<button type="button" class="btn btn-s btn-xs" onclick="loginAsUtente('${uuid}')">Login as</button>` : ""}
+ <button type="button" class="btn btn-o btn-xs" onclick="renderUtenteOrgDettaglio('${uuidJs}')">Dettagli</button>
+ ${uuid ? `<button type="button" class="btn btn-s btn-xs" onclick="loginAsUtente('${uuidJs}')">Login as</button>` : ""}
  </div>
  </td>
  </tr>`;
@@ -9675,8 +10811,12 @@ function renderPartecipantiOrg() {
  const evShort = String(p.eventiLabel || "").length > 48
  ? escapeHtml(String(p.eventiLabel).slice(0, 45) + "…")
  : escapeHtml(String(p.eventiLabel || "–"));
+ const email = String(p.email || "").trim();
+ const nomeBtn = (uuid || email)
+  ? `<button type="button" class="mtav-pnome mtav-pnome-btn td-n-btn" onclick="event.stopPropagation();apriProfiloGiocatore(${JSON.stringify(String(p.participantUuid || "").trim())},${JSON.stringify(email)})" title="Dettagli e azioni">${highlight(p.nome)}</button>${accountBadge}`
+  : `<div class="td-n">${highlight(p.nome)}${accountBadge}</div>`;
  return `<tr>
- <td><div class="td-n">${highlight(p.nome)}${accountBadge}</div></td>
+ <td>${nomeBtn}</td>
  <td><div class="td-l">${emailLine}</div></td>
  <td class="td-num"><span class="td-num-pill">${p.partecipazioni || 0}</span></td>
  <td class="td-num"><span class="td-num-pill">${p.prenotazioniDistinte || 0}</span></td>
@@ -9728,7 +10868,11 @@ function renderMastersOrg() {
  <td class="td-actions">
  <div class="td-actions-row">
  ${String(m.masterId || "").trim()
- ? `<button type="button" class="btn btn-o btn-xs" onclick='orgMostraLinkMaster(${JSON.stringify(String(m.masterId).trim())})' title="Mostra link area master">🔗 Link</button>`
+ ? `<button type="button" class="btn btn-o btn-xs" onclick='orgModificaMasterForm(${JSON.stringify(String(m.masterId).trim())})' title="Modifica nome, email e cellulare">✏️</button>
+ <button type="button" class="btn btn-s btn-xs" onclick='loginAsMaster(${JSON.stringify(String(m.masterId).trim())})' title="Apri l'area master senza codice email">Login as</button>
+ <button type="button" class="btn btn-s btn-xs" onclick='orgImpostaPasswordMasterPrompt(${JSON.stringify(String(m.masterId).trim())})' title="Imposta password del master">🔑</button>
+ <button type="button" class="btn btn-o btn-xs" onclick='orgInviaInvitoMasterConferma(${JSON.stringify(String(m.masterId).trim())})' title="Invia email di accesso al master">✉️ Invita</button>
+ <button type="button" class="btn btn-o btn-xs" onclick='orgMostraLinkMaster(${JSON.stringify(String(m.masterId).trim())})' title="Mostra link area master">🔗 Link</button>`
  : `<span class="td-muted">—</span>`}
  </div>
  </td>
@@ -9753,7 +10897,7 @@ function orgAggiungiUtenteForm() {
  }
 
  beginActionOverlay("Salvataggio utente…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) {
@@ -9769,9 +10913,39 @@ function orgAggiungiUtenteForm() {
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("org-fa", "❌ " + (err.message || err), "err");
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .orgAggiungiUtente({ nome, email, cellulare });
+}
+
+function orgNuovoMasterForm() {
+ const idEl = document.getElementById("org-master-id");
+ if (idEl) idEl.value = "";
+ ["org-master-nome", "org-master-nick", "org-master-email", "org-master-cell"].forEach(id => {
+ const el = document.getElementById(id);
+ if (el) el.value = "";
+ });
+ const title = document.getElementById("org-master-form-title");
+ if (title) title.textContent = "Nuovo master";
+ toggleOrgDisclose("org-master-form", true);
+}
+
+function orgModificaMasterForm(masterId) {
+ const id = String(masterId || "").trim().toLowerCase();
+ const m = (datiOrg?.masters || []).find(x => String(x.masterId || "").trim().toLowerCase() === id);
+ if (!m) {
+ flash("org-fa", "Master non trovato.", "err");
+ return;
+ }
+ const set = (eid, v) => { const el = document.getElementById(eid); if (el) el.value = v == null ? "" : String(v); };
+ set("org-master-id", m.masterId || "");
+ set("org-master-nome", m.nome || "");
+ set("org-master-nick", m.nick || m.nome || "");
+ set("org-master-email", m.email || "");
+ set("org-master-cell", m.cellulare || "");
+ const title = document.getElementById("org-master-form-title");
+ if (title) title.textContent = "Modifica master";
+ toggleOrgDisclose("org-master-form", true);
 }
 
 function orgAggiungiMasterForm() {
@@ -9797,7 +10971,7 @@ function orgAggiungiMasterForm() {
  }
 
  beginActionOverlay("Salvataggio master…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) {
@@ -9814,17 +10988,34 @@ function orgAggiungiMasterForm() {
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("org-fa", "❌ " + (err.message || err), "err");
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
- .orgAggiungiMaster({ nome, nick, email, cellulare });
+ .orgAggiungiMaster({
+ masterId: String(document.getElementById("org-master-id")?.value || "").trim(),
+ nome, nick, email, cellulare
+ });
 }
 
-function _buildUrlAreaSede(sedeId) {
+function _buildUrlAreaSede(sedeId, extraParams) {
  const base = String(WEBAPP_URL_SEDE || "").trim() || String(WEBAPP_URL_UTENTE || "").replace(/utente\/?$/i, "partner/");
  const id = String(sedeId || "").trim();
  if (!base || !id) return "";
+ try {
+ const u = new URL(base, window.location.origin);
+ u.searchParams.set("pagina", "partner");
+ u.searchParams.set("sedeId", id);
+ u.searchParams.set("uuid", id);
+ const extra = extraParams && typeof extraParams === "object" ? extraParams : {};
+ Object.keys(extra).forEach(k => {
+ const v = extra[k];
+ if (v == null || v === "") u.searchParams.delete(k);
+ else u.searchParams.set(k, String(v));
+ });
+ return u.toString();
+ } catch (_e) {
  const sep = base.indexOf("?") >= 0 ? "&" : "?";
- return base + sep + "uuid=" + encodeURIComponent(id);
+ return base + sep + "pagina=partner&sedeId=" + encodeURIComponent(id) + "&uuid=" + encodeURIComponent(id);
+ }
 }
 
 function orgMostraLinkSede(sedeId) {
@@ -9856,6 +11047,7 @@ function orgResetSedeForm() {
  if (att) att.checked = true;
  const cc = document.getElementById("org-sede-cc-email");
  if (cc) cc.checked = false;
+ set("org-sede-accesso", "gestione");
  const title = document.getElementById("org-sede-form-title");
  if (title) title.textContent = "Nuovo co-organizzatore";
 }
@@ -9884,6 +11076,7 @@ function orgModificaSedeForm(sedeId) {
  if (att) att.checked = s.attivo !== false;
  const cc = document.getElementById("org-sede-cc-email");
  if (cc) cc.checked = !!s.ccEmailPrenotazioni;
+ set("org-sede-accesso", s.accesso === "monitoraggio" ? "monitoraggio" : "gestione");
  const title = document.getElementById("org-sede-form-title");
  if (title) title.textContent = "Modifica co-organizzatore";
  toggleOrgDisclose("org-sede-form", true);
@@ -9893,19 +11086,19 @@ function orgToggleSedeAttiva(sedeId, attivo) {
  const id = String(sedeId || "").trim();
  if (!id) return;
  beginActionOverlay(attivo ? "Riattivazione…" : "Disattivazione…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) {
  flash("org-fa", "✅ " + (res.messaggio || "Aggiornato."), "ok");
- caricaOrg();
+ ensureOrgAnagraficheData({ force: true });
  } else {
- flash("org-fa", "⚠️ " + (res?.errore || "Operazione non riuscita."), "err");
+ flash("org-fa", "⚠️ " + (res?.errore || _erroreRispostaVuota()), "err");
  }
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("org-fa", "❌ " + (err.message || err), "err");
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .orgImpostaAttivoSede(id, !!attivo);
 }
@@ -9936,7 +11129,7 @@ function renderSediOrg() {
  return;
  }
  tbody.innerHTML = list.map(s => {
- const sid = String(s.sedeId || "").trim();
+ const sid = String(s.sedeId || s.id || s.uuid || "").trim();
  const sidJs = JSON.stringify(sid);
  const attiva = s.attivo !== false;
  return `
@@ -9947,49 +11140,115 @@ function renderSediOrg() {
  <td><div class="td-l">${s.email ? escapeHtml(s.email) : `<span class="td-muted">—</span>`}
  ${s.hasPassword ? `<div class="td-l" style="font-size:11px;color:var(--ash)">🔑 password</div>` : ""}
  ${s.ccEmailPrenotazioni ? `<div class="td-l" style="font-size:11px;color:var(--ash)">✉ CC prenotazioni</div>` : ""}
+ ${s.accesso === "monitoraggio" ? `<div class="td-l" style="font-size:11px;color:var(--ash)">👁 solo monitoraggio</div>` : ""}
  </div></td>
  <td class="org-col-optional"><span class="tipo-badge${attiva ? " t-gdr" : ""}">${attiva ? "Attivo" : "Off"}</span></td>
  <td class="td-actions">
  <div class="td-actions-row">
  ${sid
- ? `<button type="button" class="btn btn-o btn-xs" onclick='orgModificaSedeForm(${sidJs})' title="Modifica co-organizzatore">✏️</button>
+ ? `<button type="button" class="btn btn-s btn-xs btn-login-as" onclick='loginAsSede(${sidJs})' title="Apri l'area co-organizzatore senza password">Login as</button>
+ <button type="button" class="btn btn-o btn-xs" onclick='orgModificaSedeForm(${sidJs})' title="Modifica co-organizzatore">✏️</button>
  <button type="button" class="btn btn-o btn-xs" onclick='orgMostraLinkSede(${sidJs})' title="Copia link area co-organizzatore">🔗</button>
  <button type="button" class="btn btn-s btn-xs" onclick='orgImpostaPasswordSedePrompt(${sidJs})' title="Imposta password">🔑</button>
  <button type="button" class="btn btn-o btn-xs" onclick='orgToggleSedeAttiva(${sidJs},${attiva ? "false" : "true"})' title="${attiva ? "Disattiva" : "Riattiva"}">${attiva ? "⏸" : "▶"}</button>`
- : `<span class="td-muted">—</span>`}
+ : `<span class="td-muted" title="Manca sedeId: modifica e salva di nuovo il co-organizzatore">—</span>`}
  </div>
  </td>
  </tr>`;
  }).join("");
 }
 
-async function orgImpostaPasswordSedePrompt(sedeId) {
+let SEDE_PWD_TARGET_ID = "";
+// "sede" o "master": stesso overlay, diverso endpoint al salvataggio.
+let SEDE_PWD_TIPO = "sede";
+
+function _apriOverlayPassword(tipo, id, titolo, sottotitolo) {
+ SEDE_PWD_TIPO = tipo;
+ SEDE_PWD_TARGET_ID = id;
+ document.getElementById("sede-pwd-title").textContent = titolo;
+ document.getElementById("sede-pwd-sub").textContent = sottotitolo;
+ ["sede-pwd-new", "sede-pwd-confirm"].forEach(fid => {
+ const el = document.getElementById(fid);
+ el.value = "";
+ el.type = "password";
+ });
+ document.querySelectorAll("#sede-pwd-overlay .pwd-tog").forEach(b => b.setAttribute("aria-label", "Mostra password"));
+ document.getElementById("sede-pwd-err").textContent = "";
+ document.getElementById("sede-pwd-save").disabled = false;
+ show("sede-pwd-overlay");
+ setTimeout(() => document.getElementById("sede-pwd-new").focus(), 50);
+}
+
+function orgImpostaPasswordSedePrompt(sedeId) {
  const id = String(sedeId || "").trim();
  if (!id) return;
- const pwd = window.prompt("Nuova password per l'accesso co-organizzatore (min. 6 caratteri):", "");
- if (pwd == null) return;
- if (String(pwd).length < 6) {
- flash("org-fa", "Password troppo corta (minimo 6 caratteri).", "err");
- return;
- }
- beginActionOverlay("Salvataggio password co-organizzatore…");
- try {
- const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(pwd)));
- const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
- google.script.run
+ const s = (datiOrg?.sedi || []).find(x => String(x.sedeId || "") === id);
+ _apriOverlayPassword("sede", id, "🔑 Password co-organizzatore", s?.nomeSede ? "Co-organizzatore: " + s.nomeSede : "");
+}
+
+function orgImpostaPasswordMasterPrompt(masterId) {
+ const id = String(masterId || "").trim();
+ if (!id) return;
+ const m = (datiOrg?.masters || []).find(x => String(x.masterId || "") === id);
+ _apriOverlayPassword("master", id, "🔑 Password master", m ? "Master: " + (m.nick || m.nome || "") : "");
+}
+
+function orgInviaInvitoMasterConferma(masterId) {
+ const id = String(masterId || "").trim();
+ if (!id) return;
+ const m = (datiOrg?.masters || []).find(x => String(x.masterId || "") === id);
+ if (!m || !m.email) { flash("org-fa", "Questo master non ha un'email: aggiungila dall'anagrafica.", "err"); return; }
+ chiediConferma("Inviare l'email di accesso a " + (m.nick || m.nome || "questo master") + "? Riceverà il link personale e le istruzioni.", () => {
+ gildaRun()
  .withSuccessHandler(res => {
- endActionOverlay();
- if (res && res.ok) flash("org-fa", "✅ " + (res.messaggio || "Password aggiornata."), "ok");
- else flash("org-fa", "⚠️ " + (res?.errore || "Impossibile salvare password."), "err");
+ if (res && res.ok) flash("org-fa", "✅ " + (res.messaggio || "Invito inviato."), "ok");
+ else flash("org-fa", "⚠️ " + (res?.errore || "Invio non riuscito."), "err");
+ })
+ .withFailureHandler(err => flash("org-fa", "⚠️ " + _messaggioErroreServer(err), "err"))
+ .orgInviaInvitoMaster(id);
+ });
+}
+
+function chiudiSedePwdOverlay() {
+ hide("sede-pwd-overlay");
+ SEDE_PWD_TARGET_ID = "";
+ SEDE_PWD_TIPO = "sede";
+ document.getElementById("sede-pwd-title").textContent = "🔑 Password co-organizzatore";
+}
+
+async function salvaSedePwdOverlay() {
+ const errEl = document.getElementById("sede-pwd-err");
+ const saveBtn = document.getElementById("sede-pwd-save");
+ const pwd = document.getElementById("sede-pwd-new").value;
+ const conferma = document.getElementById("sede-pwd-confirm").value;
+ if (pwd.length < 6) { errEl.textContent = "La password deve avere almeno 6 caratteri."; return; }
+ if (pwd !== conferma) { errEl.textContent = "Le due password non coincidono."; return; }
+ const id = SEDE_PWD_TARGET_ID;
+ if (!id) { chiudiSedePwdOverlay(); return; }
+ errEl.textContent = "";
+ saveBtn.disabled = true;
+ try {
+ const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pwd));
+ const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+ const run = gildaRun()
+ .withSuccessHandler(res => {
+ saveBtn.disabled = false;
+ if (res && res.ok) {
+ chiudiSedePwdOverlay();
+ flash("org-fa", "✅ " + (res.messaggio || "Password aggiornata."), "ok");
+ } else {
+ errEl.textContent = res?.errore || "Impossibile salvare la password.";
+ }
  })
  .withFailureHandler(err => {
- endActionOverlay();
- flash("org-fa", "❌ " + (err.message || err), "err");
- })
- .orgImpostaPasswordSede({ sedeId: id, passwordHash: hash });
+ saveBtn.disabled = false;
+ errEl.textContent = _messaggioErroreServer(err);
+ });
+ if (SEDE_PWD_TIPO === "master") run.orgImpostaPasswordMaster({ masterId: id, passwordHash: hash });
+ else run.orgImpostaPasswordSede({ sedeId: id, passwordHash: hash });
  } catch (e) {
- endActionOverlay();
- flash("org-fa", "❌ " + (e.message || e), "err");
+ saveBtn.disabled = false;
+ errEl.textContent = e.message || String(e);
  }
 }
 
@@ -10015,7 +11274,7 @@ function orgAggiungiSedeForm() {
  return;
  }
  beginActionOverlay("Salvataggio sede…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) {
@@ -10023,14 +11282,14 @@ function orgAggiungiSedeForm() {
  toggleOrgDisclose("org-sede-form", false);
  flash("org-fa", "✅ " + (res.messaggio || "Co-organizzatore salvato."), "ok");
  if (res.sedeId && !res.aggiornato) orgMostraLinkSede(res.sedeId);
- caricaOrg();
+ ensureOrgAnagraficheData({ force: true });
  } else {
  flash("org-fa", "⚠️ " + (res?.errore || "Impossibile salvare."), "err");
  }
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("org-fa", "❌ " + (err.message || err), "err");
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .orgAggiungiSede({
  sedeId: String(idEl?.value || "").trim(),
@@ -10041,7 +11300,8 @@ function orgAggiungiSedeForm() {
  cellulare: String(cellEl?.value || "").trim(),
  note: String(noteEl?.value || "").trim(),
  attivo: !(attEl && !attEl.checked),
- ccEmailPrenotazioni
+ ccEmailPrenotazioni,
+ accesso: String(document.getElementById("org-sede-accesso")?.value || "gestione")
  });
 }
 
@@ -10168,7 +11428,7 @@ function closeUtenteDetailOverlay() {
 function orgAssegnaDaListaAttesa(evId, sessId, idTav, uuid) {
  if (!(typeof google !== "undefined" && google.script && google.script.run)) return;
  beginActionOverlay("Assegnazione posto dalla lista d'attesa…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) {
@@ -10180,7 +11440,7 @@ function orgAssegnaDaListaAttesa(evId, sessId, idTav, uuid) {
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("org-fa","❌ Errore: " + (err.message || err),"err");
+ flash("org-fa","❌ Errore: " + _messaggioErroreServer(err),"err");
  })
  .assegnaDaListaAttesa(evId, sessId, idTav, uuid);
 }
@@ -10255,7 +11515,7 @@ function orgCancellaPrenotazione(evId, sessId, uuid, tavoloAttuale, bookingId, n
  return;
  }
  beginActionOverlay("Cancellazione partecipazione…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) {
@@ -10263,12 +11523,12 @@ function orgCancellaPrenotazione(evId, sessId, uuid, tavoloAttuale, bookingId, n
  flash("org-fa", "✅ " + (res.messaggio || "Partecipazione cancellata."), "ok");
  caricaOrg();
  } else {
- flash("org-fa", "⚠️ " + (res?.errore || "Cancellazione non riuscita."), "err");
+ flash("org-fa", "⚠️ " + (res?.errore || _erroreRispostaVuota()), "err");
  }
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("org-fa", "❌ " + (err.message || err), "err");
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .modificaPrenotazione(u, String(evId || "").trim(), String(sessId || "").trim(), "cancella", {
  bookingId: String(bookingId || "").trim(),
@@ -10347,7 +11607,7 @@ function apriOrgSpostaPrenotazione(evId, sessId, uuid, tavoloAttuale, numPersone
  const notifyEl = document.getElementById("org-move-notify");
  if (notifyEl) {
  const ev = (datiOrg?.eventiConSessioni || []).find(e => String(e?.eventId || "") === String(evId || ""));
- const isPast = !!(ev && isDataPassata(ev.dataIso || ev.data));
+ const isPast = !!(ev && eventoEPassato(ev));
  notifyEl.checked = !isPast;
  }
  errEl.textContent = "";
@@ -10390,7 +11650,7 @@ function orgConfermaSpostaPrenotazione() {
  const btn = document.getElementById("org-move-submit");
  if (btn) btn.disabled = true;
  beginActionOverlay("Spostamento prenotazione…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) btn.disabled = false;
  endActionOverlay();
@@ -10399,7 +11659,7 @@ function orgConfermaSpostaPrenotazione() {
  flash("org-fa", "✅ " + (res.messaggio || "Prenotazione spostata."), "ok");
  caricaOrg();
  } else if (errEl) {
- errEl.textContent = res?.errore || "Operazione non riuscita.";
+ errEl.textContent = res?.errore || _erroreRispostaVuota();
  }
  })
  .withFailureHandler(err => {
@@ -10545,7 +11805,7 @@ async function orgInviaIscrizioneManuale() {
 
  const btn = document.getElementById("org-manual-submit");
  btn.disabled = true;
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  btn.disabled = false;
  if (res && res.ok) {
@@ -10554,14 +11814,14 @@ async function orgInviaIscrizioneManuale() {
  flash("org-fa", "✅ " + (res.messaggio || "Iscrizione registrata."), "ok");
  caricaOrg();
  } else {
- errEl.textContent = res?.errore || "Operazione non riuscita.";
+ errEl.textContent = res?.errore || _erroreRispostaVuota();
  }
  })
  .withFailureHandler(err => {
  btn.disabled = false;
  errEl.textContent = err.message || String(err);
  })
- .orgAggiungiIscrittoTavolo(hash, payload);
+ .orgAggiungiIscrittoTavolo(payload);
 }
 
 function annullaListeAttesaPerTavolo(evId, sessId, idTavolo) {
@@ -10570,7 +11830,7 @@ function annullaListeAttesaPerTavolo(evId, sessId, idTavolo) {
  const msg = `Rimuovere la preferenza "${idTavolo}" da tutti gli utenti in lista d'attesa per questa sessione?\n\nSe un utente rimane senza preferenze, uscirà dalla lista.`;
  chiediConferma(msg, () => {
  beginActionOverlay("Aggiornamento liste d'attesa…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) {
@@ -10582,7 +11842,7 @@ function annullaListeAttesaPerTavolo(evId, sessId, idTavolo) {
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("org-fa", "❌ Errore: " + (err.message || err), "err");
+ flash("org-fa", "❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .annullaListeAttesaPerTavolo(evId, sessId, idTavolo);
  });
@@ -10599,7 +11859,7 @@ function inviaPromemoriaListaAttesa(evId, sessId, idTavolo) {
  const msg = `Inviare un promemoria agli utenti in lista d'attesa per questo tavolo (primi ${N})?`;
  chiediConferma(msg, () => {
  beginActionOverlay("Invio promemoria…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) {
@@ -10611,19 +11871,91 @@ function inviaPromemoriaListaAttesa(evId, sessId, idTavolo) {
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("org-fa", "❌ Errore: " + (err.message || err), "err");
+ flash("org-fa", "❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .inviaPromemoriaListaAttesa(evId, sessId, idTavolo, N);
  });
 }
 
+function _apriFinestraAccesso(url) {
+ const win = window.open(url, "_blank", "noopener,noreferrer");
+ if (!win) flash("org-fa", "Il browser ha bloccato la finestra. Consenti i popup e riprova.", "err");
+}
+
+function _urlConSessione(base, sessionToken) {
+ const token = String(sessionToken || "").trim();
+ if (!token) return base;
+ try {
+ const u = new URL(base, window.location.origin);
+ u.searchParams.set("st", token);
+ return u.toString();
+ } catch (_e) {
+ const sep = String(base).indexOf("?") >= 0 ? "&" : "?";
+ return base + sep + "st=" + encodeURIComponent(token);
+ }
+}
+
 function loginAsUtente(uuid) {
  const id = String(uuid || "").trim();
  if (!id) return;
- // Dentro l'iframe Apps Script location è il pannello sandbox, non l'area utente.
- const url = _buildPublicUtenteUrl(id);
- const win = window.open(url, "_blank", "noopener,noreferrer");
- if (!win) flash("org-fa", "Il browser ha bloccato la finestra. Consenti i popup e riprova.", "err");
+ beginActionOverlay("Apertura area partecipante…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (!res || !res.ok || !res.sessionToken) {
+ flash("org-fa", "⚠️ " + (res?.errore || "Impossibile aprire l'area partecipante."), "err");
+ return;
+ }
+ // st= = sessione già valida: bypass OTP/codice email sul partecipante.
+ _apriFinestraAccesso(_urlConSessione(_buildPublicUtenteUrl(id), res.sessionToken));
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
+ })
+ .apriSessioneUtenteDaOrg(id);
+}
+
+function loginAsMaster(masterId) {
+ const id = String(masterId || "").trim();
+ if (!id) return;
+ beginActionOverlay("Apertura area master…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (!res || !res.ok || !res.sessionToken) {
+ flash("org-fa", "⚠️ " + (res?.errore || "Impossibile aprire l'area master."), "err");
+ return;
+ }
+ _apriFinestraAccesso(_urlConSessione(_buildUrlAreaMaster(id), res.sessionToken));
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
+ })
+ .apriSessioneMasterDaOrg(id);
+}
+
+function loginAsSede(sedeId) {
+ const id = String(sedeId || "").trim();
+ if (!id) return;
+ beginActionOverlay("Apertura area co-organizzatore…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (!res || !res.ok || !res.sessionToken) {
+ flash("org-fa", "⚠️ " + (res?.errore || "Impossibile aprire l'area co-organizzatore."), "err");
+ return;
+ }
+ // st= = sessione già valida: bypass OTP/password sul partner.
+ const url = _urlConSessione(_buildUrlAreaSede(id), res.sessionToken);
+ _apriFinestraAccesso(url);
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
+ })
+ .apriSessioneSedeDaOrg(id);
 }
 
 // ═══════════════════════════════════════════
@@ -10635,18 +11967,11 @@ let mappaSearchTerm = "";
 let _evFormOriginMappa = null;
 
 function apriMappaVistaAvanzata() {
- document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
- document.querySelectorAll("#org-tabs .tab-btn").forEach(b => b.classList.remove("active"));
- document.getElementById("t-eventi")?.classList.add("active");
- document.getElementById("org-stats-page")?.classList.add("hidden");
- document.getElementById("org-eventi-page")?.classList.add("hidden");
- document.querySelectorAll(".org-macro-btn").forEach(b => {
- b.classList.toggle("active", b.dataset.macro === "macro-eventi");
- });
- if (typeof MODE !== "undefined" && MODE === "org") setHSub("📌 Eventi e Tavoli");
- ensureOrgTavoliData();
- const evAttiviBtn = document.querySelector('.eventi-subtab[data-eventi-panel="eventi-panel-attivi"]');
- if (evAttiviBtn) switchEventiSubtab("eventi-panel-attivi", evAttiviBtn);
+ const mappa = document.getElementById("t-mappa");
+ if (mappa && !mappa.classList.contains("active")) {
+ const btn = document.querySelector('.org-macro-btn[data-macro="macro-eventi"]');
+ if (typeof switchOrgMacro === "function") switchOrgMacro("macro-eventi", btn);
+ }
 }
 
 function _mappaEventoCorrente() {
@@ -10713,6 +12038,49 @@ function _renderMappaDetailHead() {
  }
 }
 
+function linkPubblicoEvento(eventId) {
+ const id = String(eventId || "").trim();
+ if (!id) return "";
+ const base = String(APP_CONFIG.webappUrlPrenotazioni || "").trim();
+ const url = new URL(base, location.href);
+ url.searchParams.set("evento", id);
+ return url.toString();
+}
+
+function apriModificaEventoDaMappa(evId) {
+ const id = String(evId || "").trim();
+ _evFormOriginMappa = { evId: id, sessId: String(mappaSessSelezionata || "").trim() };
+ modificaEvento(id, "full", true);
+}
+
+function copiaLinkEvento(eventId) {
+ const url = linkPubblicoEvento(eventId);
+ if (!url) {
+ flash("org-fa", "Id evento mancante.", "err");
+ return;
+ }
+ const ok = () => flash("org-fa", "Link copiato.", "ok");
+ const fallback = () => {
+ const input = document.createElement("textarea");
+ input.value = url;
+ input.setAttribute("readonly", "");
+ input.style.position = "fixed";
+ input.style.left = "-9999px";
+ document.body.appendChild(input);
+ input.select();
+ let copied = false;
+ try { copied = document.execCommand("copy"); } catch (e) { copied = false; }
+ input.remove();
+ if (copied) ok();
+ else flash("org-fa", url, "ok");
+ };
+ if (navigator.clipboard && navigator.clipboard.writeText) {
+ navigator.clipboard.writeText(url).then(ok).catch(fallback);
+ return;
+ }
+ fallback();
+}
+
 /** Solo bottoni azione (niente ripetizione nome/sessione/capienza). */
 function _renderMappaActionPanel() {
  const actionsEl = document.getElementById("mappa-action-actions");
@@ -10733,9 +12101,13 @@ function _renderMappaActionPanel() {
  ? `<button type="button" class="btn btn-o btn-sm" onclick="attivaEv('${ev.eventId}')">Attiva</button>`
  : `<button type="button" class="btn btn-d btn-sm" onclick="disattivaEv('${ev.eventId}')">Disattiva</button>`;
 
+ const btnModifica = `<button type="button" class="btn btn-o btn-sm" onclick="apriModificaEventoDaMappa('${ev.eventId}')">Modifica</button>`;
+ const btnCopiaLink = `<button type="button" class="btn btn-o btn-sm" onclick="copiaLinkEvento('${ev.eventId}')">Copia link</button>`;
+
  if (!sess) {
  actionsEl.innerHTML = `
- <button type="button" class="btn btn-o btn-sm" onclick="modificaEvento('${ev.eventId}')">Modifica</button>
+ ${btnModifica}
+ ${btnCopiaLink}
  <button type="button" class="btn btn-o btn-sm" onclick="apriAvvisoEventoPopup('${ev.eventId}', '${nomeEvEsc}')">Avviso</button>
  ${btnStatoEv}
  ${EXPORT_CSV_EVENTO_ENABLED ? `<button type="button" class="btn btn-o btn-sm" onclick="esportaCsvEvento('${ev.eventId}')">CSV</button>` : ""}
@@ -10751,9 +12123,11 @@ function _renderMappaActionPanel() {
  ? `<button type="button" class="btn btn-s btn-sm" onclick="apriOrgAggiungiIscritto('${String(ev.eventId || "").replace(/'/g,"\\'")}','${String(sess.sessioneId || "").replace(/'/g,"\\'")}','SESSIONE_LIBERA')">+ Iscrizione</button>`
  : "";
  actionsEl.innerHTML = `
+ ${btnModifica}
  <button type="button" class="btn btn-o btn-sm" onclick="apriModificaSessioniDaMappa('${ev.eventId}','${String(sess.sessioneId || "").replace(/'/g, "\\'")}')">Sessioni</button>
  ${btnAggiungiTavolo}
  ${btnAggiungiIscritto}
+ ${btnCopiaLink}
  <button type="button" class="btn btn-o btn-sm" onclick="apriAvvisoEventoPopup('${ev.eventId}', '${nomeEvEsc}')">Avviso</button>
  ${btnStatoEv}
  `;
@@ -10789,10 +12163,10 @@ function renderMappaEventi() {
  const data = String(ev.data || "").toLowerCase();
  return nome.includes(term) || luogo.includes(term) || data.includes(term);
  });
- const futuri = eventiFiltrati.filter(ev => !isDataPassata(ev.data));
+ const futuri = eventiFiltrati.filter(ev => !eventoEPassato(ev));
  const attivi = futuri.filter(ev => ev.attivo !== false);
  const inattivi = futuri.filter(ev => ev.attivo === false);
- const passati = eventiFiltrati.filter(ev => isDataPassata(ev.data));
+ const passati = eventiFiltrati.filter(ev => eventoEPassato(ev));
 
  const emptyHtml = (msg) => `<div class="mev-empty"><span class="empty-icon">🎲</span>${msg}</div>`;
 
@@ -10842,7 +12216,7 @@ function mappaEvCardHtml(ev, i, prenotazioni, tavoliPerEvento) {
  return `
  <div class="mappa-ev-card" data-evid="${escapeHtml(ev.eventId)}" onclick="apriMappaEvento('${String(ev.eventId).replace(/'/g, "\\'")}')" style="animation-delay:${i*.06}s">
  <div class="mev-nome">${escapeHtml(ev.nome || ev.eventId)}</div>
- <div class="mev-data">${[ev.data ? formatDataItaliana(ev.data) : "", ev.luogo].filter(Boolean).map(escapeHtml).join(' · ')}</div>
+ <div class="mev-data">${[labelDataEvento(ev), ev.luogo].filter(Boolean).map(escapeHtml).join(' · ')}</div>
  <div class="mev-stats">
  <div class="mev-stat"><div class="mev-stat-n">${totP}</div><div class="mev-stat-l">Prenotaz.</div></div>
  <div class="mev-stat"><div class="mev-stat-n">${totPer}</div><div class="mev-stat-l">Persone</div></div>
@@ -10865,7 +12239,7 @@ function apriMappaEvento(evId) {
  const ev = datiOrg.eventiConSessioni?.find(e => e.eventId === evId);
  if (!ev) return;
 
- const sessioni = (ev.sessioni || []).slice().sort((a, b) => orarioToMinuti(a.orario || "") - orarioToMinuti(b.orario || ""));
+ const sessioni = sortSessioniPerDataOra(ev.sessioni || []);
  const tabsEl = document.getElementById("mappa-sess-tabs");
  if (tabsEl) {
  tabsEl.innerHTML = sessioni.map((s, i) =>
@@ -11016,14 +12390,64 @@ function _orgBadgePrimaVoltaHtml(uuid, email) {
  return `<span class="mtav-badge-prima" title="Prima volta alla Gilda">1ª</span>`;
 }
 
-function _orgNomeClickableHtml(nome, uuid, email) {
- const label = escapeHtml(String(nome || "–").trim() || "–");
- const jsU = _orgJsArg(uuid);
- const jsE = _orgJsArg(email);
- return `<button type="button" class="mtav-pnome mtav-pnome-btn" onclick="event.stopPropagation();apriProfiloGiocatoreOrg('${jsU}','${jsE}')" title="Apri profilo">${label}</button>`;
+/** Contesto UI per profilo giocatore (azioni nel popup). */
+function _profiloGiocatoreCtx() {
+ if (document.getElementById("sede-main") && !document.getElementById("sede-main").classList.contains("hidden")) return "sede";
+ if (document.getElementById("accoglienza-main") && !document.getElementById("accoglienza-main").classList.contains("hidden")) return "acc";
+ if (document.getElementById("master-main") && !document.getElementById("master-main").classList.contains("hidden")) return "master";
+ return "org";
 }
 
-function apriProfiloGiocatoreOrg(uuid, email) {
+/** Nome cliccabile universale (tabelle/card). extraHtml opzionale dopo il nome. */
+function _nomeClickableHtml(nome, uuid, email, extraHtml) {
+ const label = escapeHtml(String(nome || "–").trim() || "–");
+ const uid = String(uuid || "").trim();
+ const em = String(email || "").trim();
+ const suffix = extraHtml || "";
+ if (!uid && !em) return `<span class="mtav-pnome">${label}</span>${suffix}`;
+ return `<button type="button" class="mtav-pnome mtav-pnome-btn" onclick="event.stopPropagation();apriProfiloGiocatore(${JSON.stringify(uid)},${JSON.stringify(em)})" title="Dettagli e azioni">${label}</button>${suffix}`;
+}
+
+function _orgNomeClickableHtml(nome, uuid, email) {
+ return _nomeClickableHtml(nome, uuid, email, "");
+}
+
+function _profiloAzioniHtml(uuid, email, res) {
+ const ctx = _profiloGiocatoreCtx();
+ const uid = String(uuid || res?.persona?.uuid || "").trim();
+ const em = String(email || res?.persona?.email || "").trim();
+ const cell = String(res?.persona?.cellulare || "").trim();
+ const actions = [];
+ if (ctx === "org" || ctx === "master") {
+ if (uid) {
+ actions.push(`<button type="button" class="btn btn-s btn-sm" onclick="closeUtenteDetailOverlay();loginAsUtente(${JSON.stringify(uid)})">Login as</button>`);
+ actions.push(`<button type="button" class="btn btn-o btn-sm" onclick="closeUtenteDetailOverlay();renderUtenteOrgDettaglio(${JSON.stringify(uid)})">Prenotazioni</button>`);
+ }
+ }
+ if (ctx === "acc") {
+ const p = (typeof ACC_LISTA !== "undefined" ? ACC_LISTA : []).find(x =>
+ (uid && String(x.uuid || "").trim() === uid) ||
+ (em && String(x.email || "").trim().toLowerCase() === em.toLowerCase())
+ );
+ if (p) {
+ const idx = ACC_LISTA.indexOf(p);
+ const label = p.checkin ? "Annulla arrivo" : "Segna arrivato";
+ actions.push(`<button type="button" class="btn ${p.checkin ? "btn-o" : "btn-s"} btn-sm" onclick="closeUtenteDetailOverlay();accToggleArrivo(${idx})">${p.checkin ? "✅ " : "🚪 "}${label}</button>`);
+ }
+ const cellAcc = String(p?.cellulare || cell || "").trim();
+ if (cellAcc) {
+ actions.push(`<a class="btn btn-o btn-sm" href="tel:${escapeHtml(cellAcc.replace(/\s+/g, ""))}">📞 Chiama</a>`);
+ }
+ }
+ if (em) actions.push(`<a class="btn btn-o btn-sm" href="mailto:${escapeHtml(em)}">✉️ Email</a>`);
+ if (cell && ctx !== "acc") {
+ actions.push(`<a class="btn btn-o btn-sm" href="tel:${escapeHtml(cell.replace(/\s+/g, ""))}">📞 Chiama</a>`);
+ }
+ if (!actions.length) return "";
+ return `<div class="org-profilo-block org-profilo-azioni"><h4>Azioni</h4><div class="td-actions-row" style="justify-content:flex-start;flex-wrap:wrap;gap:8px">${actions.join("")}</div></div>`;
+}
+
+function _apriProfiloGiocatoreOverlay(loaderFn, uuid, email) {
  const ovEl = document.getElementById("utente-detail-overlay");
  const contentEl = document.getElementById("utente-detail-content");
  const headEl = document.querySelector("#utente-detail-overlay .user-detail-head h2");
@@ -11035,18 +12459,64 @@ function apriProfiloGiocatoreOrg(uuid, email) {
  contentEl.innerHTML = `<div class="card-body" style="padding:18px 22px"><div class="empty-state"><span class="empty-icon">⚠️</span>Ambiente non collegato al server.</div></div>`;
  return;
  }
- google.script.run
- .withSuccessHandler(res => {
+ const onOk = res => {
  if (!(res && res.ok)) {
  contentEl.innerHTML = `<div class="card-body" style="padding:18px 22px"><div class="empty-state"><span class="empty-icon">⚠️</span>${escapeHtml(res?.errore || "Profilo non disponibile.")}</div></div>`;
  return;
  }
- contentEl.innerHTML = _orgRenderProfiloGiocatoreHtml(res);
- })
- .withFailureHandler(err => {
+ contentEl.innerHTML = _orgRenderProfiloGiocatoreHtml(res) + _profiloAzioniHtml(uuid, email, res);
+ };
+ const onErr = err => {
  contentEl.innerHTML = `<div class="card-body" style="padding:18px 22px"><div class="empty-state"><span class="empty-icon">❌</span>${escapeHtml(err.message || String(err))}</div></div>`;
- })
- .getProfiloGiocatoreOrg(String(uuid || "").trim(), String(email || "").trim());
+ };
+ loaderFn(onOk, onErr);
+}
+
+/** Router unico: sceglie API in base alla vista corrente. */
+function apriProfiloGiocatore(uuid, email) {
+ const uid = String(uuid || "").trim();
+ const em = String(email || "").trim();
+ if (!uid && !em) return;
+ const ctx = _profiloGiocatoreCtx();
+ if (ctx === "sede") return apriProfiloGiocatoreSede({ eventId: window._sedeEvSel, email: em });
+ return apriProfiloGiocatoreOrg(uid, em);
+}
+
+function apriProfiloGiocatoreOrg(uuid, email) {
+ const uid = String(uuid || "").trim();
+ const em = String(email || "").trim();
+ _apriProfiloGiocatoreOverlay((onOk, onErr) => {
+ gildaRun()
+ .withSuccessHandler(onOk)
+ .withFailureHandler(onErr)
+ .getProfiloGiocatoreOrg(uid, em);
+ }, uid, em);
+}
+
+/** Stesso popup dell'organizzatore, autenticato con sessione co-organizzatore. */
+function apriProfiloGiocatoreSedeDa(el) {
+ apriProfiloGiocatoreSede({ eventId: el.dataset.evento, riga: el.dataset.riga, email: el.dataset.email });
+}
+
+/** rif = { eventId, riga, email }: il server ricava l'uuid dalla riga, il partner non lo riceve mai. */
+function apriProfiloGiocatoreSede(rif) {
+ const r = rif || {};
+ if (!r.riga && !String(r.email || "").trim()) {
+ flash("sede-fa", "Dati prenotatore incompleti.", "err");
+ return;
+ }
+ _apriProfiloGiocatoreOverlay((onOk, onErr) => {
+ const cred = typeof _sedeCredential === "function" ? _sedeCredential() : null;
+ const token = String(cred?.sessionToken || window._sedeSessionToken || "").trim();
+ const sedeId = String(cred?.sedeId || window._sedeIdOverride || "").trim();
+ gildaRun()
+ .withSuccessHandler(onOk)
+ .withFailureHandler(onErr)
+ .getProfiloGiocatoreSede(
+ { sedeId, sessionToken: token, token },
+ { eventId: String(r.eventId || ""), riga: Number(r.riga) || 0, email: String(r.email || "") }
+ );
+ }, "", String(r.email || ""));
 }
 
 function _orgRenderProfiloGiocatoreHtml(res) {
@@ -11236,20 +12706,20 @@ function orgAggiornaCheckin(evId, sessId, tavoloId, bookingId, uuid, checkin) {
   p.checkin = wanted;
  });
  _orgRerenderCheckin(evId, sessId);
- google.script.run
+ gildaRun()
   .withSuccessHandler(res => {
    if (res && res.ok) {
     flash("org-fa", "✅ " + (res.messaggio || (wanted ? "Presenza confermata." : "Presenza annullata.")), "ok");
    } else {
     prev.forEach(x => { x.p.checkin = x.checkin; });
-    flash("org-fa", "⚠️ " + (res?.errore || "Aggiornamento presenza non riuscito."), "err");
+    flash("org-fa", "⚠️ " + (res?.errore || _erroreRispostaVuota()), "err");
    }
    _orgRerenderCheckin(evId, sessId);
   })
   .withFailureHandler(err => {
    prev.forEach(x => { x.p.checkin = x.checkin; });
    _orgRerenderCheckin(evId, sessId);
-   flash("org-fa", "❌ " + (err?.message || err), "err");
+   flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
   })
   .orgConfermaPresenza(String(evId || ""), String(sessId || ""), String(tavoloId || ""), bid, String(uuid || ""), wanted);
 }
@@ -11513,10 +12983,13 @@ function renderMappaIscrizioniSessione(evId, sessId, sessNome, sessMeta) {
  ? `<button type="button" class="btn btn-d btn-sm" onclick="event.stopPropagation();orgCancellaPrenotazione('${jsEv}','${jsSess}','${jsUuid}','${jsTav}','${jsBid}','${jsNome}')">Cancella</button>`
  : `<button type="button" class="btn btn-d btn-sm" disabled title="UUID non disponibile">Cancella</button>`;
  const azioniHtml = `<div class="mtav-attesa-actions" style="margin-top:8px">${btnAssign}${btnCanc}</div>`;
+ const nomeClick = anon
+  ? escapeHtml(nomeShow)
+  : _nomeClickableHtml(nomeShow, p.uuid, email);
  return `<div class="mattesa-card">
  <div class="mattesa-avatar">${escapeHtml(iniziale)}</div>
  <div class="mattesa-info">
- <div class="mattesa-nome">#${idx + 1} · ${escapeHtml(nomeShow)}</div>
+ <div class="mattesa-nome">#${idx + 1} · ${nomeClick}</div>
  ${email ? `<div class="mattesa-det">${escapeHtml(email)}</div>` : ""}
  ${det ? `<div class="mattesa-det">${escapeHtml(det)}</div>` : ""}
  ${quando ? `<div class="mattesa-det" style="margin-top:2px;font-size:11px">${escapeHtml(quando)}</div>` : ""}
@@ -11769,13 +13242,15 @@ function renderMappaTavoli(evId, sessId, sessNome) {
  const prefText = prefIds.length ? ('Tavoli preferiti: ' + prefIds.join(', ')) : '';
  const pos = p._pos || (idx + 1);
  const quando = formatDateTimeShort(p.timestamp);
+ const email = String(p.email || "").trim();
+ const nomeClick = _nomeClickableHtml(p.nome || "–", p.uuid, email);
  return `<div class="mattesa-card">
- <div class="mattesa-avatar">${iniziale}</div>
+ <div class="mattesa-avatar">${escapeHtml(iniziale)}</div>
  <div class="mattesa-info">
- <div class="mattesa-nome">#${pos} · ${(p.nome||'–').replace(/</g,'&lt;')}</div>
- <div class="mattesa-det">${detParts.replace(/</g,'&lt;')}</div>
- ${quando ? `<div class="mattesa-det" style="margin-top:2px;font-size:11px">${quando.replace(/</g,'&lt;')}</div>` : ''}
- ${prefText ? `<div class="mattesa-det" style="margin-top:2px;font-size:11px;color:var(--smoke)">${prefText.replace(/</g,'&lt;')}</div>` : ''}
+ <div class="mattesa-nome">#${pos} · ${nomeClick}</div>
+ <div class="mattesa-det">${escapeHtml(detParts)}</div>
+ ${quando ? `<div class="mattesa-det" style="margin-top:2px;font-size:11px">${escapeHtml(quando)}</div>` : ''}
+ ${prefText ? `<div class="mattesa-det" style="margin-top:2px;font-size:11px;color:var(--smoke)">${escapeHtml(prefText)}</div>` : ''}
  </div>
  </div>`;
  }).join('');
@@ -11792,7 +13267,7 @@ function orgToggleTavoloVisibilitaPrenotazioni(evId, sessId, tavoloId, checked, 
  const visibile = !!checked;
  if (inputEl) inputEl.disabled = true;
  beginActionOverlay("Aggiornamento visibilità tavolo…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (inputEl) inputEl.disabled = false;
@@ -11814,7 +13289,7 @@ function orgToggleTavoloVisibilitaPrenotazioni(evId, sessId, tavoloId, checked, 
  inputEl.disabled = false;
  inputEl.checked = !visibile;
  }
- flash("org-fa", "❌ " + (err.message || err), "err");
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .orgSetTavoloVisibilePrenotazioni(evId, sessId, tavoloId, visibile);
 }
@@ -11967,7 +13442,7 @@ function loadOrgTavEditAvventure(masterKey, selectedAvventuraId, tavoloSeed) {
  return;
  }
  avvSel.innerHTML = `<option value="">Caricamento avventure…</option>`;
- google.script.run
+ gildaRun()
  .withSuccessHandler((res) => {
  const list = (res && res.ok && Array.isArray(res.avventure)) ? res.avventure : [];
  ORG_TAV_EDIT_AVV_CACHE[key] = list;
@@ -12090,7 +13565,7 @@ function apriOrgModificaTavolo(evId, sessId, tavoloId) {
  show("org-tav-edit-overlay");
 
  // Priorita: link tavolo->avventura; da avventura risaliamo al master affidabile.
- google.script.run
+ gildaRun()
  .withSuccessHandler((res) => {
  if (!res || !res.ok || !res.avventuraId) return;
  const masterSelEl = document.getElementById("org-tav-edit-master-select");
@@ -12128,13 +13603,14 @@ function apriOrgModificaTavolo(evId, sessId, tavoloId) {
  }
 
  beginActionOverlay("Caricamento anagrafiche master…");
- google.script.run
+ gildaRun()
  .withSuccessHandler((res) => {
  endActionOverlay();
  if (res && res.ok) {
  if (!datiOrg || typeof datiOrg !== "object") datiOrg = {};
  datiOrg.utenti = Array.isArray(res.utenti) ? res.utenti : [];
  datiOrg.masters = Array.isArray(res.masters) ? res.masters : [];
+ datiOrg.sedi = Array.isArray(res.sedi) ? res.sedi : (datiOrg.sedi || []);
  datiOrg.partecipantiNonPrenotanti = Array.isArray(res.partecipantiNonPrenotanti) ? res.partecipantiNonPrenotanti : [];
  ORG_LAZY.anagrafiche = true;
  }
@@ -12206,7 +13682,7 @@ function orgConfermaModificaTavolo() {
  const btn = document.getElementById("org-tav-edit-submit");
  if (btn) btn.disabled = true;
  beginActionOverlay("Salvataggio tavolo…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (btn) btn.disabled = false;
@@ -12215,7 +13691,7 @@ function orgConfermaModificaTavolo() {
  flash("org-fa", "✅ " + (res.messaggio || "Tavolo aggiornato."), "ok");
  caricaOrg();
  } else if (errEl) {
- errEl.textContent = res?.errore || "Operazione non riuscita.";
+ errEl.textContent = res?.errore || _erroreRispostaVuota();
  }
  })
  .withFailureHandler(err => {
@@ -12325,7 +13801,7 @@ function refreshMappaContesto(forceFetch) {
  if (forceFetch || !MAIL_STORICO_ITEMS.length) {
  mailEl.innerHTML = `<p class="mappa-ctx-placeholder">Caricamento mail…</p>`;
  if (typeof google !== "undefined" && google.script && google.script.run) {
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok && Array.isArray(res.logInviate)) {
  MAIL_STORICO_ITEMS = res.logInviate.slice();
@@ -12348,7 +13824,7 @@ function refreshMappaContesto(forceFetch) {
  logEl.innerHTML = `<p class="mappa-ctx-placeholder">Attività non disponibili in locale senza backend.</p>`;
  return;
  }
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  const voci = (res && res.ok && Array.isArray(res.voci)) ? res.voci : [];
  if (!voci.length) {
@@ -12376,8 +13852,7 @@ function aggiornaSessTav() {
  ss.innerHTML = `<option value="">— Sessione —</option>`;
  if (!evId || !datiOrg) return;
  const ev = datiOrg.eventiConSessioni?.find(e => e.eventId===evId);
- (ev?.sessioni||[]).slice()
- .sort((a, b) => orarioToMinuti(a.orario || "") - orarioToMinuti(b.orario || ""))
+ sortSessioniPerDataOra(ev?.sessioni||[])
  .forEach(s =>
  ss.insertAdjacentHTML("beforeend",`<option value="${s.sessioneId}">${s.nome}${s.orario?" – "+s.orario:""}</option>`)
  );
@@ -12402,16 +13877,19 @@ function renderTabella() {
  tb.innerHTML = `<tr><td colspan="8"><div class="empty-state"><span class="empty-icon">🔍</span>Nessun risultato per questi filtri.</div></td></tr>`;
  return;
  }
- tb.innerHTML = r.map(p => `<tr>
- <td><div class="td-n">${p.nome||"–"}</div></td>
- <td><div class="td-l">${p.email||"–"}</div><div class="td-l">${p.cellulare||""}</div></td>
- <td style="white-space:nowrap">${p.eventNome||p.eventId}<div class="td-l">${formatDataItaliana(p.eventData||"")}</div></td>
- <td>${p.sessione||"–"}</td>
- <td style="max-width:180px">${p.isListaAttesa?"<em style='color:var(--ash)'>Lista d'attesa</em>":p.tavolo||"–"}</td>
+ tb.innerHTML = r.map(p => {
+ const nomeHtml = _nomeClickableHtml(p.nome || "–", p.uuid, p.email);
+ return `<tr>
+ <td><div class="td-n mtav-pnome-wrap">${nomeHtml}</div></td>
+ <td><div class="td-l">${escapeHtml(p.email||"–")}</div><div class="td-l">${escapeHtml(p.cellulare||"")}</div></td>
+ <td style="white-space:nowrap">${escapeHtml(p.eventNome||p.eventId)}<div class="td-l">${formatDataItaliana(p.eventData||"")}</div></td>
+ <td>${escapeHtml(p.sessione||"–")}</td>
+ <td style="max-width:180px">${p.isListaAttesa?"<em style='color:var(--ash)'>Lista d'attesa</em>":escapeHtml(p.tavolo||"–")}</td>
  <td class="td-num"><span class="td-num-pill">${p.numPersone||"–"}</span></td>
- <td class="org-col-optional" style="font-size:12px;color:var(--smoke);font-style:italic">${labelsFasciaCsv(p.fasciaEta)||"–"}</td>
+ <td class="org-col-optional" style="font-size:12px;color:var(--smoke);font-style:italic">${escapeHtml(labelsFasciaCsv(p.fasciaEta)||"–")}</td>
  <td>${p.isListaAttesa?`<span class="badge b-att">⏳</span>`:`<span class="badge b-ok">✅</span>`}</td>
- </tr>`).join("");
+ </tr>`;
+ }).join("");
 }
 
 function renderTavoli() {
@@ -12602,7 +14080,7 @@ function esportaCsvEvento(evId) {
  if (!evId) return;
  setLdr("Generazione CSV evento…");
  show("loader");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  hide("loader");
  if (!res || !res.ok || !res.csv) {
@@ -12619,7 +14097,7 @@ function esportaCsvEvento(evId) {
  })
  .withFailureHandler(err => {
  hide("loader");
- flash("org-fa", "❌ Errore export CSV: " + (err?.message || err), "err");
+ flash("org-fa", "❌ Errore export CSV: " + _messaggioErroreServer(err), "err");
  })
  .esportaCsvEvento(evId);
 }
@@ -12630,10 +14108,10 @@ function esportaCsvEvento(evId) {
 function renderEventiList() {
  if (!datiOrg) return;
  const eventi = datiOrg.eventiPerGestione || datiOrg.eventiConSessioni || [];
- const futuri = eventi.filter(ev => !isDataPassata(ev.data));
+ const futuri = eventi.filter(ev => !eventoEPassato(ev));
  const attivi = futuri.filter(ev => ev.attivo !== false);
  const inattivi = futuri.filter(ev => ev.attivo === false);
- const passati = eventi.filter(ev => isDataPassata(ev.data));
+ const passati = eventi.filter(ev => eventoEPassato(ev));
 
  const elAttivi = document.getElementById("eventi-list");
  const elInattivi = document.getElementById("eventi-list-inattivi");
@@ -12665,7 +14143,7 @@ function orgRicostruisciAvventureLegacyDaTavoli() {
  "Ricostruire Avventure e AvventureTavoli dai dati legacy del foglio Tavoli?",
  () => {
  beginActionOverlay("Ricostruzione Avventure in corso…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (!res || !res.ok) {
@@ -12689,7 +14167,7 @@ function orgRicostruisciAvventureLegacyDaTavoli() {
  "Ricostruzione Avventure legacy da Tavoli fallita.",
  err?.message || String(err)
  );
- flash("org-fa", "❌ " + (err?.message || err), "err");
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .orgRicostruisciAvventureDaTavoliLegacy();
  }
@@ -12704,15 +14182,17 @@ function evCardHtml(ev, conAzioni) {
  </div>
  <div style="margin-top:14px">
  <div class="lbl" style="margin-bottom:6px">Sessioni</div>
- ${(ev.sessioni||[]).map(s =>
- `<div style="font-size:14px;margin-bottom:4px;padding:6px 10px;background:var(--parch2);border-radius:6px;display:flex;gap:8px;align-items:center">
- <span style="font-weight:600">${s.nome}</span>
- ${s.orario?`<span style="color:var(--ash)">· ${s.orario}</span>`:""}
- <code style="font-size:10px;margin-left:auto">${s.sessioneId}</code>
- </div>`
- ).join("")||"<span style='color:var(--ash);font-style:italic;font-size:13px'>Nessuna sessione</span>"}
+ ${sortSessioniPerDataOra(ev.sessioni||[]).map(s => {
+ const dS = labelDataSessione(s, ev);
+ return `<div style="font-size:14px;margin-bottom:4px;padding:6px 10px;background:var(--parch2);border-radius:6px;display:flex;gap:8px;align-items:center">
+ <span style="font-weight:600">${escapeHtml(s.nome)}</span>
+ ${dS?`<span style="color:var(--ash)">· ${escapeHtml(dS)}</span>`:""}
+ ${s.orario?`<span style="color:var(--ash)">· ${escapeHtml(s.orario)}</span>`:""}
+ <code style="font-size:10px;margin-left:auto">${escapeHtml(s.sessioneId)}</code>
  </div>`;
- const pill = isDataPassata(ev.data)
+ }).join("")||"<span style='color:var(--ash);font-style:italic;font-size:13px'>Nessuna sessione</span>"}
+ </div>`;
+ const pill = eventoEPassato(ev)
  ? `<span class="ev-attivo-pill pill-past">Passato</span>`
  : (ev.attivo !== false
  ? `<span class="ev-attivo-pill pill-si">Attivo</span>`
@@ -12723,16 +14203,24 @@ function evCardHtml(ev, conAzioni) {
  const btnAttivaDisattiva = conAzioni && (ev.attivo === false
  ? `<button class="btn btn-g btn-sm" onclick="event.stopPropagation();chiediConferma('Attivare l\\'evento &quot;${ev.nome.replace(/"/g, "&quot;")}&quot;?',()=>attivaEv('${ev.eventId}'))">▶ Attiva</button>`
  : `<button class="btn btn-d btn-sm" onclick="event.stopPropagation();chiediConferma('Disattivare l\\'evento &quot;${ev.nome.replace(/"/g, "&quot;")}&quot;?',()=>disattivaEv('${ev.eventId}'))">⏸ Disattiva</button>`);
+ const btnAnnullato = conAzioni
+ ? `<button class="btn btn-d btn-sm" onclick="event.stopPropagation();chiediConferma('Inviare l\\'avviso di annullamento di &quot;${ev.nome.replace(/"/g, "&quot;")}&quot; a tutti gli iscritti?',()=>inviaAvvisoAnnullamentoEv('${ev.eventId}'))">✉️ Avvisa annullamento</button>`
+ : "";
+ const btnNonPresenti = conAzioni
+ ? `<button class="btn btn-o btn-sm" onclick="event.stopPropagation();orgNonPresentatiConferma('${ev.eventId}')">📭 Mail ai non presentati</button>`
+ : "";
  const azioni = conAzioni
  ? `${btnStatoAvviso}
  ${EXPORT_CSV_EVENTO_ENABLED ? `<button class="btn btn-g btn-sm" onclick="event.stopPropagation();esportaCsvEvento('${ev.eventId}')">📤 Esporta CSV evento</button>` : ""}
  <button class="btn btn-o btn-sm" onclick="event.stopPropagation();modificaEvento('${ev.eventId}')">✏️ Modifica</button>
- ${btnAttivaDisattiva}`
+ ${btnAttivaDisattiva}
+ ${btnAnnullato}
+ ${btnNonPresenti}`
  : "";
  return `
  <div class="ev-card">
  <div class="ev-head" onclick="this.nextElementSibling.classList.toggle('hidden')">
- <h3>🎲 ${ev.nome} <span style="font-size:12px;color:var(--ash);font-weight:400;font-family:'Crimson Pro',serif;font-style:italic">${formatDataItaliana(ev.data||"")}</span></h3>
+ <h3>🎲 ${ev.nome} <span style="font-size:12px;color:var(--ash);font-weight:400;font-family:'Crimson Pro',serif;font-style:italic">${escapeHtml(labelDataEvento(ev) || "")}</span></h3>
  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
  ${pill}
  ${azioni}
@@ -12850,15 +14338,35 @@ function aggiornaIdTavolo(_input) {
  // Manteniamo ID progressivi stabili: il titolo non deve piu' influenzare l'ID del tavolo.
 }
 
-function sincronizzaSessNeiTavoli() {
- const sessioniEls = Array.from(document.getElementById("sessioni-list").querySelectorAll(".sess-item"))
- .map((el, idx) => ({ el, idx }));
- sessioniEls.sort((a, b) => {
+/** Ordine sessioni nel form: data (senza data in fondo), poi orario, a parità resta l'ordine attuale. */
+function _confrontaSessioniForm(a, b) {
+ const da = a.el.querySelector(".sess-data")?.value || "";
+ const db = b.el.querySelector(".sess-data")?.value || "";
+ if (da !== db) {
+ if (!da) return 1;
+ if (!db) return -1;
+ return da < db ? -1 : 1;
+ }
  const ta = orarioToMinuti(a.el.querySelector(".sess-orario")?.value || "");
  const tb = orarioToMinuti(b.el.querySelector(".sess-orario")?.value || "");
  if (ta !== tb) return ta - tb;
  return a.idx - b.idx;
- });
+}
+
+/** Riordina le card sessione nel DOM (chiamato al cambio di data/orario e dopo ogni aggiunta). */
+function ordinaSessioniForm() {
+ const list = document.getElementById("sessioni-list");
+ if (!list) return;
+ Array.from(list.querySelectorAll(".sess-item"))
+ .map((el, idx) => ({ el, idx }))
+ .sort(_confrontaSessioniForm)
+ .forEach(s => list.appendChild(s.el));
+}
+
+function sincronizzaSessNeiTavoli() {
+ const sessioniEls = Array.from(document.getElementById("sessioni-list").querySelectorAll(".sess-item"))
+ .map((el, idx) => ({ el, idx }));
+ sessioniEls.sort(_confrontaSessioniForm);
  const nuoveOpts = sessioniEls.map(s => ({
  id: s.el.querySelector(".sess-id").value || "",
  nm: s.el.querySelector(".sess-nome").value || "Sessione"
@@ -12976,8 +14484,6 @@ function syncTavoliSectionFromSessioni() {
 }
 
 function apriNuovoEvento() {
- // Il form evento vive in t-eventi: se arrivo dalla Mappa, porto prima la UI su quel tab.
- apriMappaVistaAvanzata();
  _evFormOriginMappa = null;
  _setEvFormMode("full");
  document.getElementById("ev-id").value = "";
@@ -12986,9 +14492,11 @@ function apriNuovoEvento() {
  document.getElementById("ev-luogo").value = "";
  const evLuogoInd = document.getElementById("ev-luogo-indirizzo");
  if (evLuogoInd) evLuogoInd.value = "";
- const evCoorg = document.getElementById("ev-sede-coorg");
- if (evCoorg) evCoorg.value = "";
  document.getElementById("ev-desc").value = "";
+ const evLinkNuovo = document.getElementById("ev-link-esterno");
+ if (evLinkNuovo) evLinkNuovo.value = "";
+ const evLocNuovo = document.getElementById("ev-locandina");
+ if (evLocNuovo) evLocNuovo.value = "";
  document.getElementById("ev-attivo").checked = true;
  const cbAvviso = document.getElementById("ev-avviso-nuovi-tavoli");
  if (cbAvviso) cbAvviso.checked = false;
@@ -13003,7 +14511,7 @@ function apriNuovoEvento() {
  ensureOrgLuoghiLoaded(() => {
  populateEvLuogoSelect("", "");
  ensureOrgSediForEventForm(() => {
- populateEvSedeCoorgSelect("");
+ populateEvSedeCoorgList([]);
  show("ev-form-panel");
  });
  });
@@ -13040,26 +14548,27 @@ function onEvLuogoChange() {
  const addr = String(sel.selectedOptions?.[0]?.getAttribute("data-indirizzo") || "").trim();
  inpAddr.value = addr;
 }
-function populateEvSedeCoorgSelect(selectedNome) {
- const sel = document.getElementById("ev-sede-coorg");
- if (!sel) return;
- const curr = String(selectedNome || "").trim();
+function populateEvSedeCoorgList(selectedIds) {
+ const box = document.getElementById("ev-sede-coorg-list");
+ if (!box) return;
+ const sel = new Set((selectedIds || []).map(v => String(v || "").trim().toLowerCase()));
  const sedi = Array.isArray(window._orgSediEventForm)
  ? window._orgSediEventForm
  : (Array.isArray(datiOrg?.sedi) ? datiOrg.sedi : []);
- let html = `<option value="">— Nessuna —</option>`;
- sedi
- .filter(s => s && s.attivo !== false && String(s.nomeSede || "").trim())
- .sort((a, b) => String(a.nomeSede).localeCompare(String(b.nomeSede), "it"))
- .forEach(s => {
- const nome = String(s.nomeSede || "").trim();
- html += `<option value="${escapeHtml(nome)}"${nome === curr ? " selected" : ""}>${escapeHtml(nome)}</option>`;
+ const nomeDi = id => (sedi.find(s => String(s?.sedeId || "").toLowerCase() === id) || {}).nomeSede || id;
+ const riga = (id, nome, checked) => `<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer"><input type="checkbox" value="${escapeHtml(id)}"${checked ? " checked" : ""} style="width:auto;accent-color:var(--ember)"> ${escapeHtml(nome)}</label>`;
+ const attive = sedi
+ .filter(s => s && s.attivo !== false && s.sedeId && String(s.nomeSede || "").trim())
+ .sort((a, b) => String(a.nomeSede).localeCompare(String(b.nomeSede), "it"));
+ const idAttivi = new Set(attive.map(s => String(s.sedeId).toLowerCase()));
+ let html = attive.map(s => {
+ const id = String(s.sedeId).toLowerCase();
+ return riga(id, s.nomeSede, sel.has(id));
+ }).join("");
+ [...sel].filter(id => !idAttivi.has(id)).forEach(id => {
+ html += riga(id, nomeDi(id) + " (non attivo)", true);
  });
- if (curr && !sedi.some(s => String(s?.nomeSede || "").trim() === curr)) {
- html += `<option value="${escapeHtml(curr)}" selected>${escapeHtml(curr + " (non in elenco)")}</option>`;
- }
- sel.innerHTML = html;
- if (curr) sel.value = curr;
+ box.innerHTML = html || `<span class="hint">Nessun co-organizzatore attivo.</span>`;
 }
 function ensureOrgSediForEventForm(callback) {
  const done = (cb) => { try { if (typeof cb === "function") cb(); } catch (_e) {} };
@@ -13067,7 +14576,7 @@ function ensureOrgSediForEventForm(callback) {
  window._orgSediEventForm = datiOrg.sedi;
  return done(callback);
  }
- google.script.run
+ gildaRun()
  .withSuccessHandler((res) => {
  window._orgSediEventForm = Array.isArray(res?.sedi) ? res.sedi : [];
  done(callback);
@@ -13081,7 +14590,7 @@ function ensureOrgSediForEventForm(callback) {
 function ensureOrgLuoghiLoaded(callback) {
  const done = (cb) => { try { if (typeof cb === "function") cb(); } catch (_e) {} };
  if (Array.isArray(ORG_LUOGHI) && ORG_LUOGHI.length) return done(callback);
- google.script.run
+ gildaRun()
  .withSuccessHandler((list) => {
  ORG_LUOGHI = Array.isArray(list) ? list : [];
  done(callback);
@@ -13095,7 +14604,7 @@ function aggiungiNuovoLuogoEvento(btn) {
  const indirizzo = String(window.prompt("Indirizzo luogo (opzionale):", "") || "").trim();
  const prev = btn ? btn.textContent : "+";
  if (btn) { btn.disabled = true; btn.textContent = "…"; }
- google.script.run
+ gildaRun()
  .withSuccessHandler((res) => {
  if (btn) { btn.disabled = false; btn.textContent = prev || "+"; }
  if (!res || !res.ok) {
@@ -13114,7 +14623,7 @@ function aggiungiNuovoLuogoEvento(btn) {
  })
  .withFailureHandler((err) => {
  if (btn) { btn.disabled = false; btn.textContent = prev || "+"; }
- flash("org-fa", "❌ Errore: " + (err.message || err), "err");
+ flash("org-fa", "❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .salvaLuogoConfig(nome, indirizzo);
 }
@@ -13195,6 +14704,19 @@ function isDataPassata(dataStr) {
  return iso < oggiStr;
 }
 
+/** Passato solo se l'ultima sessione (o la data evento) è prima di oggi. */
+function eventoEPassato(ev) {
+ if (!ev) return false;
+ const sessioni = ev.sessioni || [];
+ let max = "";
+ sessioni.forEach(s => {
+  const iso = dataItalianaToYYYYMMDD(s && (s.dataIso || s.data)) || String((s && (s.dataIso || s.data)) || "").trim();
+  if (iso && (!max || iso > max)) max = iso.substring(0, 10);
+ });
+ if (max) return isDataPassata(max);
+ return isDataPassata(ev.dataIso || ev.data);
+}
+
 /** True se l'utente può modificare o cancellare la prenotazione (solo per eventi attivi e non passati). */
 function puoModificarePrenotazione(p) {
  if (!p || !p.eventId) return false;
@@ -13265,8 +14787,12 @@ function modificaEvento(evId, mode, preserveMappaOrigin) {
  document.getElementById("ev-luogo").value = luogoNome;
  const evLuogoInd = document.getElementById("ev-luogo-indirizzo");
  if (evLuogoInd) evLuogoInd.value = luogoInd;
- const coorgNome = String(ev.sedeCoorganizzatore || "").trim();
+ const coorgIds = Array.isArray(ev.sedeCoorgIds) ? ev.sedeCoorgIds : [];
  document.getElementById("ev-desc").value = ev.descrizione||"";
+ const evLink = document.getElementById("ev-link-esterno");
+ if (evLink) evLink.value = ev.linkPrenotazioneEsterna || "";
+ const evLoc = document.getElementById("ev-locandina");
+ if (evLoc) evLoc.value = ev.locandinaDriveId || "";
  document.getElementById("ev-attivo").checked = (ev.attivo !== false);
  const cbAvviso = document.getElementById("ev-avviso-nuovi-tavoli");
  if (cbAvviso) cbAvviso.checked = false;
@@ -13279,10 +14805,10 @@ function modificaEvento(evId, mode, preserveMappaOrigin) {
  ? "Gestione tavoli: " + ev.nome
  : "Modifica: " + ev.nome);
  document.getElementById("sessioni-list").innerHTML = "";
- (ev.sessioni||[]).slice()
- .sort((a, b) => orarioToMinuti(a.orario || "") - orarioToMinuti(b.orario || ""))
- .forEach(s => aggiungiSessione(s.sessioneId, s.nome, s.orario, s.maxPosti, s.tipoSessione, s.fasciaEtaMinima, s.giochiDisponibili));
+ sortSessioniPerDataOra(ev.sessioni||[])
+ .forEach(s => aggiungiSessione(s.sessioneId, s.nome, s.orario, s.maxPosti, s.tipoSessione, s.fasciaEtaMinima, s.giochiDisponibili, s.dataIso || s.data));
  if (!ev.sessioni?.length) aggiungiSessione();
+ _syncEvDataDaSessioni();
  document.getElementById("tavoli-form-list").innerHTML = "";
  const hasSessTavoli = (ev.sessioni || []).some(s => !_isTipoSessioneFormSenzaTavoli(s.tipoSessione));
  if (hasSessTavoli) {
@@ -13296,7 +14822,7 @@ function modificaEvento(evId, mode, preserveMappaOrigin) {
  ensureOrgLuoghiLoaded(() => {
  populateEvLuogoSelect(luogoNome, luogoInd);
  ensureOrgSediForEventForm(() => {
- populateEvSedeCoorgSelect(coorgNome);
+ populateEvSedeCoorgList(coorgIds);
  show("ev-form-panel");
  });
  });
@@ -13331,9 +14857,58 @@ function _updateSessioneAccordionTitle(sessItem) {
  if (!sessItem) return;
  const nome = String(sessItem.querySelector(".sess-nome")?.value || "").trim();
  const id = String(sessItem.querySelector(".sess-id")?.value || "").trim();
+ const data = String(sessItem.querySelector(".sess-data")?.value || "").trim();
  const orario = String(sessItem.querySelector(".sess-orario")?.value || "").trim();
  const label = nome || id || "Nuova sessione";
- _setEvAccordionTitle(sessItem, `🧭 ${label}${orario ? " · " + orario : ""}`);
+ const dataLbl = data && typeof formatDataItaliana === "function" ? (formatDataItaliana(data) || data) : data;
+ const coda = [dataLbl, orario].filter(Boolean).join(" · ");
+ _setEvAccordionTitle(sessItem, `🧭 ${label}${coda ? " · " + coda : ""}`);
+}
+
+/** Etichetta data evento: una data, oppure intervallo dalle sessioni. */
+function labelDataEvento(ev) {
+ const sessioni = (ev && ev.sessioni) || [];
+ const dates = [];
+ sessioni.forEach(s => {
+  const iso = dataItalianaToYYYYMMDD(s && (s.dataIso || s.data)) || String((s && (s.dataIso || s.data)) || "").trim();
+  if (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) && !dates.includes(iso.substring(0, 10))) dates.push(iso.substring(0, 10));
+ });
+ dates.sort();
+ if (dates.length >= 2) {
+  return (formatDataItaliana(dates[0]) || dates[0]) + " – " + (formatDataItaliana(dates[dates.length - 1]) || dates[dates.length - 1]);
+ }
+ if (dates.length === 1) return formatDataItaliana(dates[0]) || dates[0];
+ return ev && ev.data ? (formatDataItaliana(ev.data) || ev.data) : "";
+}
+
+function labelDataSessione(s, ev) {
+ const iso = dataItalianaToYYYYMMDD(s && (s.dataIso || s.data))
+  || String((s && (s.dataIso || s.data)) || "").trim()
+  || dataItalianaToYYYYMMDD(ev && ev.data)
+  || String((ev && ev.data) || "").trim();
+ if (!iso) return "";
+ return formatDataItaliana(iso) || iso;
+}
+
+function sortSessioniPerDataOra(sessioni) {
+ return (sessioni || []).slice().sort((a, b) => {
+  const da = dataItalianaToYYYYMMDD(a.dataIso || a.data) || String(a.dataIso || a.data || "");
+  const db = dataItalianaToYYYYMMDD(b.dataIso || b.data) || String(b.dataIso || b.data || "");
+  if (da !== db) return String(da).localeCompare(String(db));
+  return orarioToMinuti(a.orario || "") - orarioToMinuti(b.orario || "");
+ });
+}
+
+function _syncEvDataDaSessioni() {
+ const evData = document.getElementById("ev-data");
+ const list = document.getElementById("sessioni-list");
+ if (!evData || !list) return;
+ let min = "";
+ list.querySelectorAll(".sess-data").forEach(inp => {
+  const v = String(inp.value || "").trim();
+  if (v && (!min || v < min)) min = v;
+ });
+ if (min) evData.value = min;
 }
 
 function _updateTavoloAccordionTitle(tavItem) {
@@ -13370,7 +14945,7 @@ function _parseGiochiDisponibiliUI(raw) {
  .filter(Boolean);
 }
 
-function aggiungiSessione(id, nome, orario, maxPosti, tipoSessione, fasciaEtaMinima, giochiDisponibili) {
+function aggiungiSessione(id, nome, orario, maxPosti, tipoSessione, fasciaEtaMinima, giochiDisponibili, data) {
  const div = document.createElement("div");
  div.className = "ev-acc-item sess-item";
  const maxPostiNum = parseInt(maxPosti || 0, 10) || 0;
@@ -13380,6 +14955,7 @@ function aggiungiSessione(id, nome, orario, maxPosti, tipoSessione, fasciaEtaMin
  const noMax = senzaTav && maxPostiNum < 1 && !!id;
  const isOpen = !id;
  const giochiTxt = escapeHtml(_giochiDisponibiliToTextarea(giochiDisponibili));
+ const dataVal = dataItalianaToYYYYMMDD(data) || String(data || "").trim();
  div.classList.toggle("is-open", isOpen);
  div.innerHTML = `
  <button type="button" class="ev-acc-head" onclick="toggleEvAccordion(this)" aria-expanded="${isOpen ? "true" : "false"}">
@@ -13401,10 +14977,18 @@ function aggiungiSessione(id, nome, orario, maxPosti, tipoSessione, fasciaEtaMin
  <input type="text" class="sess-id id-auto-field" placeholder="turno_unico" value="${id||""}" readonly data-manuale="${id ? "1" : "0"}">
  </div>
  </div>
- <div class="field" style="margin-top:10px">
+ <div class="row2" style="margin-top:10px">
+ <div class="field first">
+ <label class="lbl">Data sessione</label>
+ <input type="date" class="sess-data" min="2020-01-01" max="2030-12-31" value="${escapeHtml(dataVal)}"
+ oninput="_updateSessioneAccordionTitle(this.closest('.sess-item'));_syncEvDataDaSessioni()" onchange="ordinaSessioniForm()">
+ <div class="hint">Per eventi su più giorni: una data per sessione.</div>
+ </div>
+ <div class="field first">
  <label class="lbl">Orario</label>
  <input type="text" class="sess-orario" placeholder="es. 14:30 – 18:00" value="${orario||""}"
- oninput="sincronizzaSessNeiTavoli();_updateSessioneAccordionTitle(this.closest('.sess-item'))">
+ oninput="sincronizzaSessNeiTavoli();_updateSessioneAccordionTitle(this.closest('.sess-item'))" onchange="ordinaSessioniForm()">
+ </div>
  </div>
  <div class="row2" style="margin-top:10px">
  <div class="field first">
@@ -13448,18 +15032,14 @@ function aggiungiSessione(id, nome, orario, maxPosti, tipoSessione, fasciaEtaMin
  else syncFasceEtaDaFoglio(fillFascia);
  syncSessMaxPostiUI(div);
  _updateSessioneAccordionTitle(div);
+ ordinaSessioniForm();
  syncTavoliSectionFromSessioni();
 }
 
 function aggiungiTavolo(t) {
  const sessioniEls = Array.from(document.getElementById("sessioni-list").querySelectorAll(".sess-item"))
  .map((el, idx) => ({ el, idx }));
- sessioniEls.sort((a, b) => {
- const ta = orarioToMinuti(a.el.querySelector(".sess-orario")?.value || "");
- const tb = orarioToMinuti(b.el.querySelector(".sess-orario")?.value || "");
- if (ta !== tb) return ta - tb;
- return a.idx - b.idx;
- });
+ sessioniEls.sort(_confrontaSessioniForm);
  const tavSess = String(t?.sessioneId || "").trim();
  const tavSessNorm = _normSessJS(tavSess);
  let hasSessMatch = false;
@@ -13561,7 +15141,7 @@ function aggiungiNuovoSistemaGioco(btn, targetSelectId) {
  }
  const prev = btn?.textContent;
  if (btn) { btn.disabled = true; btn.textContent = "…"; }
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) { btn.disabled = false; btn.textContent = prev || "+"; }
  if (!res || !res.ok) {
@@ -13592,7 +15172,7 @@ function aggiungiNuovoSistemaGioco(btn, targetSelectId) {
  })
  .withFailureHandler(err => {
  if (btn) { btn.disabled = false; btn.textContent = prev || "+"; }
- flash("org-fa", "❌ Errore: " + (err.message || err), "err");
+ flash("org-fa", "❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .aggiungiSistemaGiocoConfig(sistema);
 }
@@ -13603,9 +15183,6 @@ function salvaEventoForm() {
 
  if (!evId || !evNome) {
  flash("org-fa","⚠️ ID e Nome evento sono obbligatori.","err");
- const btnEv = document.querySelector('.tab-btn[data-tab="t-eventi"]');
- if (btnEv) switchTab("t-eventi", btnEv);
- else if (typeof apriMappaVistaAvanzata === "function") apriMappaVistaAvanzata();
  return;
  }
  if (!/^[a-z0-9_]+$/.test(evId)) {
@@ -13618,10 +15195,12 @@ function salvaEventoForm() {
  const senza = _isTipoSessioneFormSenzaTavoli(tipoSessione);
  const noMax = senza && !!s.querySelector(".sess-nomax")?.checked;
  const maxRaw = parseInt(s.querySelector(".sess-maxposti")?.value || 0, 10) || 0;
+ const dataSess = String(s.querySelector(".sess-data")?.value || "").trim();
  return {
  sessioneId: s.querySelector(".sess-id").value.trim() || "",
  nome: s.querySelector(".sess-nome").value.trim() || "Turno unico",
  orario: s.querySelector(".sess-orario").value.trim(),
+ data: dataSess,
  attivo: true,
  maxPosti: (senza && noMax) ? 0 : maxRaw,
  tipoSessione,
@@ -13658,7 +15237,14 @@ function salvaEventoForm() {
  };
  }).filter(t => t.id);
 
- if (!sessioni.length) { flash("org-fa","⚠️ Aggiungi almeno una sessione.","err"); return; }
+ const linkCampo = document.getElementById("ev-link-esterno");
+ const linkEsterno = linkCampo ? String(linkCampo.value || "").trim() : "";
+ const prefissoLink = _prefissoHttps();
+ if (linkEsterno && linkEsterno.slice(0, prefissoLink.length).toLowerCase() !== prefissoLink) {
+ flash("org-fa","Il link del portale esterno deve iniziare con https","err");
+ return;
+ }
+ if (!sessioni.length && !linkEsterno) { flash("org-fa","⚠️ Aggiungi almeno una sessione.","err"); return; }
  const sessioniTavoli = sessioni.filter(s => !_isTipoSessioneFormSenzaTavoli(s.tipoSessione));
  // Ingresso: o «nessun massimo» oppure capienza ≥ 1.
  const ingressoConTettoInvalido = Array.from(document.getElementById("sessioni-list").querySelectorAll(".sess-item")).some(el => {
@@ -13671,20 +15257,19 @@ function salvaEventoForm() {
  flash("org-fa","⚠️ Indica la capienza massima, oppure seleziona «Nessun numero massimo di posti».","err");
  return;
  }
- if (sessioniTavoli.length && !tavoli.length) {
- flash("org-fa","⚠️ Aggiungi almeno un tavolo per le sessioni a prenotazione tavoli.","err");
- return;
- }
  const tavoliFiltrati = sessioniTavoli.length ? tavoli : [];
 
+ _syncEvDataDaSessioni();
  const payload = {
  eventId: evId,
  nome: evNome,
  data: document.getElementById("ev-data").value.trim(),
  luogo: document.getElementById("ev-luogo").value.trim(),
  luogoIndirizzo: String(document.getElementById("ev-luogo-indirizzo")?.value || "").trim(),
- sedeCoorganizzatore: String(document.getElementById("ev-sede-coorg")?.value || "").trim(),
+ sedeCoorgIds: Array.from(document.querySelectorAll("#ev-sede-coorg-list input[type=checkbox]:checked")).map(i => i.value),
  descrizione: document.getElementById("ev-desc").value.trim(),
+ linkPrenotazioneEsterna: linkEsterno,
+ locandinaDriveId: String(document.getElementById("ev-locandina")?.value || "").trim(),
  attivo: document.getElementById("ev-attivo").checked,
  inviaAvvisoNuoviTavoli: !!document.getElementById("ev-avviso-nuovi-tavoli")?.checked,
  inviaAvvisoNuoviGiochi: !!document.getElementById("ev-avviso-nuovi-giochi")?.checked,
@@ -13693,7 +15278,7 @@ function salvaEventoForm() {
  };
 
  if (payload.inviaAvvisoNuoviTavoli) {
- google.script.run
+ gildaRun()
  .withSuccessHandler(pre => {
  if (!pre || !pre.ok) {
  flash("org-fa","⚠️ " + (pre?.errore || "Impossibile calcolare anteprima destinatari."), "err");
@@ -13707,7 +15292,7 @@ function salvaEventoForm() {
  apriSelezioneAvvisoNuoviTavoli(pre, payload);
  })
  .withFailureHandler(err => {
- flash("org-fa","❌ Errore anteprima avvisi: " + (err.message || err), "err");
+ flash("org-fa","❌ Errore anteprima avvisi: " + _messaggioErroreServer(err), "err");
  })
  .anteprimaAvvisoNuoviTavoli(payload);
  return;
@@ -13759,7 +15344,7 @@ function confermaSelezioneAvvisoNuoviTavoli() {
 
 function _continuaSalvaEvento(payload) {
  if (payload && payload.inviaAvvisoNuoviGiochi && !payload._giochiAvvisoGestito) {
- google.script.run
+ gildaRun()
  .withSuccessHandler(pre => {
  if (!pre || !pre.ok) {
  flash("org-fa","⚠️ " + (pre?.errore || "Impossibile calcolare l'anteprima dei giochi."), "err");
@@ -13775,7 +15360,7 @@ function _continuaSalvaEvento(payload) {
  apriSelezioneAvvisoNuoviGiochi(pre, payload);
  })
  .withFailureHandler(err => {
- flash("org-fa","❌ Errore anteprima giochi: " + (err.message || err), "err");
+ flash("org-fa","❌ Errore anteprima giochi: " + _messaggioErroreServer(err), "err");
  _riapriEventoDopoAvviso();
  })
  .anteprimaAvvisoNuoviGiochi(payload);
@@ -13857,12 +15442,12 @@ function eseguiSalvataggioEvento(payload) {
  if (panelAvviso) delete panelAvviso.dataset.riapriDopoAvviso;
  document.querySelectorAll(".btn").forEach(b => b.disabled=true);
  beginActionOverlay("Salvataggio evento…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  document.querySelectorAll(".btn").forEach(b => b.disabled=false);
- if (res.ok) {
- flash("org-fa","✅ "+res.messaggio,"ok");
+ if (res && res.ok) {
+ flash("org-fa","✅ "+(res.messaggio || "Evento salvato."),"ok");
  const shouldRestoreMappa = !!_evFormOriginMappa;
  hide("ev-form-panel");
  caricaOrg();
@@ -13871,55 +15456,98 @@ function eseguiSalvataggioEvento(payload) {
  }
  }
  else {
- segnalaErroreOrgClient("salvaEvento", payload, "Salvataggio evento: risposta server non ok.", res.errore);
- flash("org-fa","⚠️ "+res.errore,"err");
+ const errTxt = res && res.errore ? res.errore : _erroreRispostaVuota();
+ segnalaErroreOrgClient("salvaEvento", payload, "Salvataggio evento: risposta server non ok.", errTxt);
+ flash("org-fa","⚠️ "+errTxt,"err");
  }
  })
  .withFailureHandler(err => {
  endActionOverlay();
  document.querySelectorAll(".btn").forEach(b => b.disabled=false);
  segnalaErroreOrgClient("salvaEvento", payload, "Chiamata salvaEvento fallita (connessione/eccezione).", err.message || String(err));
- flash("org-fa","Operazione non riuscita. Riprova o controlla la connessione.","err");
+ flash("org-fa", _messaggioErroreServer(err), "err");
  })
- .salvaEvento(payload);
+ .salvaEvento(Object.assign({}, payload, { _build: APP_CONFIG.buildId }));
 }
 
 function disattivaEv(evId) {
  beginActionOverlay("Disattivazione evento…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) { flash("org-fa","✅ "+res.messaggio,"ok"); caricaOrg(); }
  else {
  segnalaErroreOrgClient("disattivaEvento", { eventId: evId }, "Disattivazione evento: risposta server non ok.", res?.errore);
- flash("org-fa","⚠️ "+res.errore,"err");
+ flash("org-fa","⚠️ "+((res && res.errore) || _erroreRispostaVuota()),"err");
  }
  })
  .withFailureHandler(err => {
  endActionOverlay();
  segnalaErroreOrgClient("disattivaEvento", { eventId: evId }, "Chiamata disattivaEvento fallita (connessione/eccezione).", err.message || String(err));
- flash("org-fa","Operazione non riuscita. Riprova o controlla la connessione.","err");
+ flash("org-fa", _messaggioErroreServer(err), "err");
  })
- .disattivaEvento(evId);
+ .disattivaEvento(evId, APP_CONFIG.buildId);
+}
+
+function orgNonPresentatiConferma(evId) {
+ beginActionOverlay("Controllo presenze…");
+ gildaRun()
+ .withSuccessHandler(pre => {
+ endActionOverlay();
+ if (!pre || !pre.ok) { flash("org-fa", "⚠️ " + (pre?.errore || "Impossibile calcolare i destinatari."), "err"); return; }
+ if (!pre.totale) { flash("org-fa", "ℹ️ Nessuno da avvisare: tutti i prenotati risultano presenti.", "info"); return; }
+ chiediConferma("Inviare una mail a " + pre.totale + " persone che non si sono presentate? Chiederà il motivo e ricorderà di cancellare la prenotazione se non verranno più.", () => {
+ beginActionOverlay("Invio mail…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (res && res.ok) flash("org-fa", "✅ " + res.messaggio, "ok");
+ else flash("org-fa", "⚠️ " + (res?.errore || "Invio non riuscito."), "err");
+ })
+ .withFailureHandler(err => { endActionOverlay(); flash("org-fa", _messaggioErroreServer(err), "err"); })
+ .orgInviaMailNonPresentati(evId);
+ });
+ })
+ .withFailureHandler(err => { endActionOverlay(); flash("org-fa", _messaggioErroreServer(err), "err"); })
+ .orgAnteprimaNonPresentati(evId);
+}
+
+function inviaAvvisoAnnullamentoEv(evId) {
+ beginActionOverlay("Invio avviso di annullamento…");
+ gildaRun()
+ .withSuccessHandler(res => {
+ endActionOverlay();
+ if (res && res.ok) flash("org-fa","✅ "+res.messaggio,"ok");
+ else {
+ segnalaErroreOrgClient("inviaAvvisoEventoAnnullato", { eventId: evId }, "Invio avviso annullamento: risposta server non ok.", res?.errore);
+ flash("org-fa","⚠️ "+(res?.errore || "Errore durante l'invio."),"err");
+ }
+ })
+ .withFailureHandler(err => {
+ endActionOverlay();
+ segnalaErroreOrgClient("inviaAvvisoEventoAnnullato", { eventId: evId }, "Chiamata inviaAvvisoEventoAnnullato fallita (connessione/eccezione).", err.message || String(err));
+ flash("org-fa", _messaggioErroreServer(err), "err");
+ })
+ .inviaAvvisoEventoAnnullato(evId);
 }
 
 function attivaEv(evId) {
  beginActionOverlay("Attivazione evento…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) { flash("org-fa","✅ "+res.messaggio,"ok"); caricaOrg(); }
  else {
  segnalaErroreOrgClient("attivaEvento", { eventId: evId }, "Attivazione evento: risposta server non ok.", res?.errore);
- flash("org-fa","⚠️ "+res.errore,"err");
+ flash("org-fa","⚠️ "+((res && res.errore) || _erroreRispostaVuota()),"err");
  }
  })
  .withFailureHandler(err => {
  endActionOverlay();
  segnalaErroreOrgClient("attivaEvento", { eventId: evId }, "Chiamata attivaEvento fallita (connessione/eccezione).", err.message || String(err));
- flash("org-fa","Operazione non riuscita. Riprova o controlla la connessione.","err");
+ flash("org-fa", _messaggioErroreServer(err), "err");
  })
- .attivaEvento(evId);
+ .attivaEvento(evId, APP_CONFIG.buildId);
 }
 
 function inviaNotificaNuovoEvento(eventId, nomeEv) {
@@ -13946,7 +15574,7 @@ function confermaInviaNotificaNuovoEvento() {
  const mode = (modeTest && modeTest.checked) ? "test" : "utenti";
  hide("notifica-overlay");
  beginActionOverlay("Invio notifica nuovo evento…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (res && res.ok) {
@@ -13963,7 +15591,7 @@ function confermaInviaNotificaNuovoEvento() {
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("org-fa","❌ Errore: " + (err.message || err),"err");
+ flash("org-fa","❌ Errore: " + _messaggioErroreServer(err),"err");
  })
  .inviaNotificaNuovoEvento(NOTIFICA_EVENTO_CORRENTE_ID, mode);
 }
@@ -14025,10 +15653,10 @@ function apriAvvisoEventoPopup(eventId, nomeEvento) {
  if (firstTabBtn) firstTabBtn.classList.add("active");
  show("avviso-evento-overlay");
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (!res || !res.ok) {
- if (subtitleEl) subtitleEl.textContent = "Errore caricamento";
+ if (subtitleEl) subtitleEl.textContent = _erroreRispostaVuota();
  if (listEl) listEl.innerHTML = `<div class="avviso-evento-muted" style="color:#b71c1c">❌ ${_escapeHtmlMail(res?.errore || "Errore nel caricamento stato avviso.")}</div>`;
  return;
  }
@@ -14045,8 +15673,8 @@ function apriAvvisoEventoPopup(eventId, nomeEvento) {
  _renderAvvisoEventoPopupTab();
  })
  .withFailureHandler(err => {
- if (subtitleEl) subtitleEl.textContent = "Errore caricamento";
- if (listEl) listEl.innerHTML = `<div class="avviso-evento-muted" style="color:#b71c1c">❌ ${_escapeHtmlMail(err?.message || err || "Errore di connessione.")}</div>`;
+ if (subtitleEl) subtitleEl.textContent = _messaggioErroreServer(err);
+ if (listEl) listEl.innerHTML = `<div class="avviso-evento-muted" style="color:#b71c1c">❌ ${_escapeHtmlMail_messaggioErroreServer(err)}</div>`;
  })
  .getDettaglioAvvisoEvento(eventId);
 }
@@ -14116,7 +15744,7 @@ function eseguiSetup() {
  setSetupStatus("⏳ Esecuzione setup in corso…", "info");
  SETUP_CHECKS.forEach(id => setCheckStatus(id, "pending"));
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  btn.disabled = false; vbtn.disabled = false;
  if (res && res.ok) {
@@ -14135,7 +15763,7 @@ function eseguiSetup() {
  btn.disabled = false; vbtn.disabled = false;
  SETUP_CHECKS.forEach(id => setCheckStatus(id, "fail"));
  segnalaErroreOrgClient("setupFogliConfig", null, "Chiamata setupFogliConfig fallita (connessione/eccezione).", err.message || String(err));
- setSetupStatus("❌ Errore: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .setupFogliConfig();
 }
@@ -14145,7 +15773,7 @@ function eseguiMigrazioniSetup() {
  if (btn) btn.disabled = true;
  setSetupStatus("📦 Esecuzione migrazioni in corso…", "info");
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) btn.disabled = false;
  if (!res) {
@@ -14156,7 +15784,7 @@ function eseguiMigrazioniSetup() {
  const dettaglio = res.applicate.join(" · ");
  setSetupStatus("✅ " + (res.messaggio || "Migrazioni applicate.") + " " + dettaglio, "ok");
  } else if (res.errori && res.errori.length) {
- setSetupStatus("⚠️ " + res.messaggio + " " + res.errori.join("; "), "err");
+ setSetupStatus("⚠️ " + (res.messaggio || "Migrazioni non completate.") + " " + res.errori.join("; "), "err");
  } else {
  setSetupStatus("✅ " + (res.messaggio || "Nessuna migrazione pendente. Fogli già aggiornati."), "ok");
  }
@@ -14164,7 +15792,7 @@ function eseguiMigrazioniSetup() {
  .withFailureHandler(err => {
  if (btn) btn.disabled = false;
  segnalaErroreOrgClient("eseguiMigrazioni", null, "Migrazioni fallite.", err.message || String(err));
- setSetupStatus("❌ Errore migrazioni: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore migrazioni: " + _messaggioErroreServer(err), "err");
  })
  .eseguiMigrazioni();
 }
@@ -14174,7 +15802,7 @@ function inviaEmailTestSetup() {
  const tipo = sel ? sel.value : "tutte";
  setSetupStatus("✉️ Invio email di prova in corso…", "info");
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) {
  setSetupStatus("✅ " + (res.messaggio || "Email di prova inviate."), "ok");
@@ -14188,7 +15816,7 @@ function inviaEmailTestSetup() {
  })
  .withFailureHandler(err => {
  segnalaErroreOrgClient("inviaEmailTest", { tipo }, "Invio email di prova fallito.", err.message || String(err));
- setSetupStatus("❌ Errore invio email di prova: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore invio email di prova: " + _messaggioErroreServer(err), "err");
  })
  .inviaEmailTest(tipo);
 }
@@ -14199,7 +15827,7 @@ function verificaSetup() {
  btn.disabled = true; vbtn.disabled = true;
  setSetupStatus("🔍 Verifica struttura fogli in corso…", "info");
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  btn.disabled = false; vbtn.disabled = false;
  if (!res || !res.ok) {
@@ -14225,7 +15853,7 @@ function verificaSetup() {
  .withFailureHandler(err => {
  btn.disabled = false; vbtn.disabled = false;
  segnalaErroreOrgClient("verificaStruttura", null, "Chiamata verificaStruttura fallita (connessione/eccezione).", err.message || String(err));
- setSetupStatus("❌ Errore verifica: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore verifica: " + _messaggioErroreServer(err), "err");
  })
  .verificaStruttura();
 }
@@ -14274,7 +15902,7 @@ function aggiornaStatoBackupFogli() {
  const panel = document.getElementById("backup-status-panel");
  if (!panel) return;
  panel.textContent = "Caricamento stato backup...";
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => _renderStatoBackupFogli(res))
  .withFailureHandler(err => _renderStatoBackupFogli({ ok: false, errore: err?.message || String(err || "") }))
  .getStatoBackupFogli();
@@ -14285,7 +15913,7 @@ function aggiornaStatoTriggerSchedulati() {
  const btn = document.getElementById("trigger-refresh-btn");
  if (panel) panel.textContent = "Caricamento stato trigger...";
  if (btn) btn.disabled = true;
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) btn.disabled = false;
  _renderStatoTriggerSchedulati(res);
@@ -14301,7 +15929,7 @@ function installaTriggerCodaEmailDaUI() {
  const btn = document.getElementById("trigger-install-email-btn");
  if (btn) btn.disabled = true;
  setSetupStatus("⏱ Configurazione trigger coda email in corso…", "info");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) btn.disabled = false;
  if (res && res.ok) {
@@ -14313,7 +15941,7 @@ function installaTriggerCodaEmailDaUI() {
  })
  .withFailureHandler(err => {
  if (btn) btn.disabled = false;
- setSetupStatus("❌ Errore configurazione trigger: " + (err?.message || err), "err");
+ setSetupStatus("❌ Errore configurazione trigger: " + _messaggioErroreServer(err), "err");
  })
  .installaTriggerCodaEmailOgni30Min();
 }
@@ -14322,7 +15950,7 @@ function installaTriggerBackupDaUI() {
  const btn = document.getElementById("trigger-install-backup-btn");
  if (btn) btn.disabled = true;
  setSetupStatus("💾 Configurazione trigger backup in corso…", "info");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) btn.disabled = false;
  if (res && res.ok) {
@@ -14334,7 +15962,7 @@ function installaTriggerBackupDaUI() {
  })
  .withFailureHandler(err => {
  if (btn) btn.disabled = false;
- setSetupStatus("❌ Errore configurazione trigger backup: " + (err?.message || err), "err");
+ setSetupStatus("❌ Errore configurazione trigger backup: " + _messaggioErroreServer(err), "err");
  })
  .installaTriggerBackupGiornaliero();
 }
@@ -14343,19 +15971,19 @@ function eseguiBackupFogliDaUI() {
  const btn = document.getElementById("backup-run-btn");
  if (btn) btn.disabled = true;
  setSetupStatus("💾 Backup fogli in corso…", "info");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) btn.disabled = false;
  if (res && res.ok) {
  setSetupStatus("✅ Backup completato: copie Config e Risposte su Drive.", "ok");
  aggiornaStatoBackupFogli();
  } else {
- setSetupStatus("⚠️ Backup non riuscito: " + (res?.errore || "errore sconosciuto"), "err");
+ setSetupStatus("⚠️ Backup non riuscito: " + (res?.errore || _erroreRispostaVuota()), "err");
  }
  })
  .withFailureHandler(err => {
  if (btn) btn.disabled = false;
- setSetupStatus("❌ Errore backup: " + (err?.message || err), "err");
+ setSetupStatus("❌ Errore backup: " + _messaggioErroreServer(err), "err");
  })
  .eseguiBackupFogliManuale();
 }
@@ -14525,7 +16153,7 @@ function aggiornaStatoMailOrg() {
  const panel = document.getElementById("mail-status-panel");
  if (btn) btn.disabled = true;
  if (panel) panel.textContent = "Caricamento stato email...";
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) btn.disabled = false;
  _renderMailOrgStatus(res);
@@ -14540,7 +16168,7 @@ function aggiornaStatoMailOrg() {
 function processaCodaEmailOraDaUI() {
  const btn = document.getElementById("mail-run-queue-btn");
  if (btn) btn.disabled = true;
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) btn.disabled = false;
  if (res && res.ok) {
@@ -14553,7 +16181,7 @@ function processaCodaEmailOraDaUI() {
  })
  .withFailureHandler(err => {
  if (btn) btn.disabled = false;
- showNotifyPopup("❌ Errore durante il processamento coda: " + (err?.message || err), "err");
+ showNotifyPopup("❌ Errore durante il processamento coda: " + _messaggioErroreServer(err), "err");
  })
  .processaCodaEmailSchedulato(30);
 }
@@ -14585,7 +16213,7 @@ function salvaHashSuSheet() {
  const btn = document.getElementById("btn-salva-hash");
  btn.disabled = true;
  btn.textContent = "⏳ Salvataggio…";
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  btn.disabled = false;
  if (res && res.ok) {
@@ -14603,7 +16231,7 @@ function salvaHashSuSheet() {
  btn.disabled = false;
  segnalaErroreOrgClient("salvaHashPassword", { hashPresente: true }, "Chiamata salvaHashPassword fallita (connessione/eccezione). Hash non inviato.", err.message || String(err));
  btn.textContent = "💾 Salva nel foglio Config";
- setSetupStatus("❌ Errore: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .salvaHashPassword(h);
 }
@@ -14613,13 +16241,13 @@ function salvaEmailTestOk() {
  if (!cb) return;
  const enabled = !!cb.checked;
  setSetupStatus("⏳ Salvataggio conferma email di test…", "info");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) setSetupStatus("✅ Conferma email di test salvata.", "ok");
  else setSetupStatus("⚠️ " + (res?.errore || "Errore nel salvataggio."), "err");
  })
  .withFailureHandler(err => {
- setSetupStatus("❌ Errore: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .salvaOpzioniConfig({ EMAIL_TEST_FUNZIONANO: enabled });
 }
@@ -14659,7 +16287,7 @@ function salvaOpzioniConfig() {
  btn.disabled = true;
  btn.textContent = "⏳ Salvataggio…";
  }
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) {
  btn.disabled = false;
@@ -14680,7 +16308,7 @@ function salvaOpzioniConfig() {
  btn.disabled = false;
  btn.textContent = "💾 Salva opzioni in Config";
  }
- setSetupStatus("❌ Errore: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .salvaOpzioniConfig({
  USE_WAITLIST_PRIORITY: enabled,
@@ -14708,7 +16336,7 @@ function runRicostruisciUtenti() {
  setSetupStatus("⚠️ Ricostruzione disponibile solo nell'ambiente Apps Script.", "err");
  return;
  }
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) {
  btn.disabled = false;
@@ -14725,7 +16353,7 @@ function runRicostruisciUtenti() {
  btn.disabled = false;
  btn.textContent = "🧮 Ricostruisci elenco utenti da Risposte";
  }
- setSetupStatus("❌ Errore: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .ricostruisciFoglioUtentiJob();
 }
@@ -14744,7 +16372,7 @@ function runRicostruisciMasters() {
  setSetupStatus("⚠️ Ricostruzione disponibile solo nell'ambiente Apps Script.", "err");
  return;
  }
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) {
  btn.disabled = false;
@@ -14762,7 +16390,7 @@ function runRicostruisciMasters() {
  btn.disabled = false;
  btn.textContent = "🧙 Ricostruisci elenco master da Tavoli";
  }
- setSetupStatus("❌ Errore: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .ricostruisciFoglioMastersJob();
 }
@@ -14782,7 +16410,7 @@ function runRipristinoStoricoSicuro() {
  }
 
  setBtnBusy(true, "🔎 Analisi storico…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(pre => {
  if (!pre || !pre.ok) {
  setBtnBusy(false, labelIdle);
@@ -14817,7 +16445,7 @@ function runRipristinoStoricoSicuro() {
  }
 
  setBtnBusy(true, "🩹 Ripristino in corso…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  setBtnBusy(false, labelIdle);
  if (res && res.ok) {
@@ -14831,13 +16459,13 @@ function runRipristinoStoricoSicuro() {
  })
  .withFailureHandler(err => {
  setBtnBusy(false, labelIdle);
- setSetupStatus("❌ Errore: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .ripristinaPrenotazioniStoricheCancellate({ dryRun: false, maxRipristini: 1500 });
  })
  .withFailureHandler(err => {
  setBtnBusy(false, labelIdle);
- setSetupStatus("❌ Errore: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore: " + _messaggioErroreServer(err), "err");
  })
  .ripristinaPrenotazioniStoricheCancellate({ dryRun: true, maxRipristini: 1500 });
 }
@@ -14874,9 +16502,10 @@ function _renderAnomaliePrenotazioni(res) {
  const fixBtn = a.correggibile
  ? `<button type="button" class="btn btn-s btn-xs" data-hc-act="correggi" data-ev="${ev}" data-riga="${riga}">Correggi</button>`
  : "";
+ const nomeAnom = _nomeClickableHtml(a.nome || "—", a.uuid, a.email);
  return `<tr>
  <td><div class="td-n">${escapeHtml(a.evento || a.eventId || "")}</div><div class="td-l">riga ${riga}</div></td>
- <td><div class="td-n">${escapeHtml(a.nome || "—")}</div><div class="td-l">${escapeHtml(a.email || "—")}</div></td>
+ <td><div class="td-n mtav-pnome-wrap">${nomeAnom}</div><div class="td-l">${escapeHtml(a.email || "—")}</div></td>
  <td class="td-l">${escapeHtml(a.sessione || "—")} · ${escapeHtml(a.tavolo || "—")}</td>
  <td>${escapeHtml(issues)}</td>
  <td class="td-actions"><div class="td-actions-row">
@@ -14896,7 +16525,7 @@ function caricaAnomaliePrenotazioni() {
  const box = document.getElementById("org-hc-anomalie");
  if (btn) { btn.disabled = true; btn.textContent = "Lettura…"; }
  if (box) box.innerHTML = `<p class="org-tab-desc">Lettura delle prenotazioni anomale…</p>`;
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) { btn.disabled = false; btn.textContent = "Vedi anomalie"; }
  _renderAnomaliePrenotazioni(res);
@@ -14914,11 +16543,11 @@ function risolviAnomaliaDaUI(azione, eventId, riga, label) {
  : `Applicare la correzione automatica a ${label}, riga ${riga}? I posti a zero diventano 1, il nome vuoto viene compilato e, se manca sessione o tavolo, la riga viene cancellata.`;
  chiediConferma(msg, () => {
  beginActionOverlay(azione === "cancella" ? "Cancellazione…" : "Correzione…");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  endActionOverlay();
  if (!res || !res.ok) {
- flash("org-fa", "⚠️ " + (res?.errore || "Operazione non riuscita."), "err");
+ flash("org-fa", "⚠️ " + (res?.errore || _erroreRispostaVuota()), "err");
  return;
  }
  flash("org-fa", (res.risolta ? "✅ " : "⚠️ ") + (res.messaggio || "Fatto."), res.risolta ? "ok" : "err");
@@ -14926,7 +16555,7 @@ function risolviAnomaliaDaUI(azione, eventId, riga, label) {
  })
  .withFailureHandler(err => {
  endActionOverlay();
- flash("org-fa", "❌ " + (err?.message || err), "err");
+ flash("org-fa", "❌ " + _messaggioErroreServer(err), "err");
  })
  .risolviAnomaliaPrenotazione(eventId, riga, azione);
  });
@@ -14961,7 +16590,7 @@ function runHealthCheckFogliNow() {
  return;
  }
 
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (btn) {
  btn.disabled = false;
@@ -14994,7 +16623,7 @@ function runHealthCheckFogliNow() {
  btn.disabled = false;
  btn.textContent = "🧪 Esegui health check ora";
  }
- const errMsg = "❌ Errore health check: " + (err.message || err);
+ const errMsg = "❌ Errore health check: " + _messaggioErroreServer(err);
  if (hcMeta) hcMeta.textContent = errMsg;
  setSetupStatus(errMsg, "err");
  })
@@ -15027,7 +16656,7 @@ function runResetFogliSetup(mode) {
  }
 
  setSetupStatus(`⏳ Esecuzione ${m === "hard" ? "reset hard" : "reset soft"} in corso…`, "info");
- google.script.run
+ gildaRun()
  .withSuccessHandler(res => {
  if (res && res.ok) {
  setSetupStatus("✅ " + (res.messaggio || "Reset completato."), "ok");
@@ -15037,7 +16666,7 @@ function runResetFogliSetup(mode) {
  }
  })
  .withFailureHandler(err => {
- setSetupStatus("❌ Errore reset: " + (err.message || err), "err");
+ setSetupStatus("❌ Errore reset: " + _messaggioErroreServer(err), "err");
  })
  .resetFogliSetup(m, "RESET_CONFERMATO");
 }

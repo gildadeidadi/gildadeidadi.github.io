@@ -41,8 +41,20 @@
       if (tokenEl) tokenEl.textContent = JSON.stringify(String(cfg.inviteToken));
     }
 
-    if (!document.title || document.title === orgNome) {
-      document.title = (isOrg ? "Dashboard organizzatore" : "Prenotazioni") + " · " + orgNome;
+    var pagina = String(cfg.pagina || "").toLowerCase();
+    var pageLabels = {
+      prenotazione: "Prenotazioni",
+      utente: "Le mie prenotazioni",
+      organizzatore: "Organizzatore",
+      master: "Master",
+      sede: "Co-organizzatore",
+      partner: "Partner",
+      accoglienza: "Accoglienza",
+      feedback: "Feedback"
+    };
+    var pageLabel = pageLabels[pagina] || (isOrg ? "Organizzatore" : "");
+    if (!document.title || document.title === orgNome || document.title.indexOf(" · ") < 0) {
+      document.title = pageLabel ? (pageLabel + " · " + orgNome) : orgNome;
     }
   }
 

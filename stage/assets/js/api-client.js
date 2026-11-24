@@ -16,9 +16,10 @@
  *   body: {"method":"…","args":[…],"token":"…"}
  *   risposta: {"__gilda":1,"ok":true,"result":…} | {"__gilda":1,"ok":false,"error":"…","code":"…"}
  *
- * Per endpoint cross-origin (backend Apps Script, che non espone header CORS)
- * si usa automaticamente JSONP:
- *   GET {apiUrl}?action=…&args=<json>&token=…&callback=…
+ * Funziona anche cross-origin (GitHub Pages → Apps Script /exec): Apps Script
+ * risponde con Access-Control-Allow-Origin: *, e una POST text/plain senza
+ * header custom né credenziali non fa partire il preflight. Niente JSONP:
+ * il token resta nel corpo, mai nell'URL.
  *
  * Sessione: il backend emette un token al login (`verificaPasswordOrg`).
  * Il token viene salvato in sessionStorage e allegato a ogni richiesta; se il
@@ -30,7 +31,6 @@
 
   var cfg = window.GILDA_CONFIG || (window.GILDA_CONFIG = {});
   var TOKEN_KEY = "gilda.api.token";
-  var sequence = 0;
 
   // ── Sessione ────────────────────────────────────────────────────────────
   function getToken() {
@@ -72,20 +72,6 @@
   function endpoint() {
     if (cfg.apiUrl) return String(cfg.apiUrl);
     return window.location.origin + "/api/run";
-  }
-
-  function isCrossOrigin(url) {
-    try {
-      return new URL(url, window.location.href).origin !== window.location.origin;
-    } catch (err) {
-      return false;
-    }
-  }
-
-  function useJsonp() {
-    if (cfg.transport === "jsonp") return true;
-    if (cfg.transport === "fetch") return false;
-    return isCrossOrigin(endpoint());
   }
 
   function toError(payload, fallback) {
@@ -160,65 +146,10 @@
       });
   }
 
-  function jsonpCall(method, args) {
-    return new Promise(function (resolve, reject) {
-      var timeout = Number(cfg.timeoutMs) || 30000;
-      var callbackName = "__gildaJsonp" + Date.now() + "_" + ++sequence;
-      var script = document.createElement("script");
-      var timer = null;
-      var done = false;
-
-      function cleanup() {
-        if (done) return;
-        done = true;
-        if (timer) clearTimeout(timer);
-        // No-op al posto di delete: una risposta tardiva (cold start > timeout)
-        // non deve lanciare ReferenceError in console.
-        window[callbackName] = function () {};
-        if (script.parentNode) script.parentNode.removeChild(script);
-        setTimeout(function () {
-          try { delete window[callbackName]; } catch (err) { window[callbackName] = undefined; }
-        }, Math.max(timeout, 60000));
-      }
-
-      window[callbackName] = function (payload) {
-        cleanup();
-        try {
-          resolve(unwrap(payload));
-        } catch (err) {
-          try {
-            handleFailure(err);
-          } catch (rethrown) {
-            reject(rethrown);
-          }
-        }
-      };
-
-      script.onerror = function () {
-        cleanup();
-        reject(new Error("Impossibile contattare il backend (" + endpoint() + ")"));
-      };
-
-      timer = setTimeout(function () {
-        cleanup();
-        reject(new Error("Richiesta scaduta (" + timeout + " ms)"));
-      }, timeout);
-
-      var url = endpoint() + (endpoint().indexOf("?") === -1 ? "?" : "&");
-      script.src =
-        url +
-        "action=" + encodeURIComponent(method) +
-        "&callback=" + encodeURIComponent(callbackName) +
-        "&args=" + encodeURIComponent(JSON.stringify(args || [])) +
-        "&token=" + encodeURIComponent(readToken());
-      document.head.appendChild(script);
-    });
-  }
-
   function call(method, args) {
     if (!method) return Promise.reject(new Error("Metodo backend mancante"));
     if (cfg.transport === "gas") return gasCall(method, args || []);
-    return useJsonp() ? jsonpCall(method, args || []) : fetchCall(method, args || []);
+    return fetchCall(method, args || []);
   }
 
   var nativeRunGetter = null;
@@ -241,20 +172,32 @@
         reject(new Error("google.script.run non è disponibile"));
         return;
       }
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        reject(new Error("Il server non risponde. Ricarica la pagina."));
+      }, cfg.timeoutMs || 30000);
+      function fine(fn, value) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn(value);
+      }
       runner
         .withSuccessHandler(function (payload) {
           try {
-            resolve(unwrap(payload));
+            fine(resolve, unwrap(payload));
           } catch (err) {
             try {
               handleFailure(err);
             } catch (rethrown) {
-              reject(rethrown);
+              fine(reject, rethrown);
             }
           }
         })
         .withFailureHandler(function (err) {
-          reject(err instanceof Error ? err : new Error(String(err && err.message || err || "Errore dal backend")));
+          fine(reject, err instanceof Error ? err : new Error(String(err && err.message || err || "Errore dal backend")));
         })
         .apiEsegui(method, args || [], readToken());
     });
@@ -263,7 +206,7 @@
   window.gildaApi = {
     call: call,
     endpoint: endpoint,
-    transport: function () { return cfg.transport === "gas" ? "gas" : (useJsonp() ? "jsonp" : "fetch"); },
+    transport: function () { return cfg.transport === "gas" ? "gas" : "fetch"; },
     getToken: readToken,
     setToken: setToken,
     clearToken: clearToken
@@ -305,8 +248,12 @@
 
   window.google = window.google || {};
   window.google.script = window.google.script || {};
-  Object.defineProperty(window.google.script, "run", {
-    configurable: true,
-    get: function () { return createChain(); }
-  });
+  try {
+    Object.defineProperty(window.google.script, "run", {
+      configurable: true,
+      get: function () { return createChain(); }
+    });
+  } catch (err) {
+    /* Il runtime Apps Script non lascia sostituire run: restano le funzioni native. */
+  }
 })();
