@@ -5613,6 +5613,12 @@ function renderRegEventi() {
  sessPills = `<span class="rec-pill ev-sess">🕐 ${[d1, sessioni[0].orario].filter(Boolean).join(" · ")}</span>`;
  } else if (nSess === 1) {
  sessPills = `<span class="rec-pill ev-sess">1 sessione</span>`;
+ } else if (nSess > 3) {
+ // Molte sessioni: elenco compatto a scorrimento invece di pillole lunghe
+ sessPills = `<div class="rec-sess-list">${sessioni.map(s => {
+  const d = labelDataSessione(s, ev);
+  return `<div class="rec-sess-row"><span class="rec-sess-when">🕐 ${escapeHtml([d, s.orario].filter(Boolean).join(" · "))}</span><span class="rec-sess-nome">${escapeHtml(s.nome || "")}</span></div>`;
+ }).join("")}</div>`;
  } else {
  sessPills = sessioni.map(s => {
   const d = labelDataSessione(s, ev);
@@ -5645,7 +5651,7 @@ function renderRegEventi() {
   : "";
 
  return `
- <div class="reg-ev-card${inApertura ? " disabled" : ""}${locUrl ? " has-locandina" : ""}"${cardOnclick}${cardKey} style="animation-delay:${Math.min(i, 6)*.04}s">
+ <div class="reg-ev-card${inApertura ? " disabled" : ""}${locUrl ? " has-locandina" : ""}${nSess > 3 ? " many-sess" : ""}"${cardOnclick}${cardKey} style="animation-delay:${Math.min(i, 6)*.04}s">
  ${locHtml}
  <div class="rec-body">
  <div class="rec-nome">${ev.nome}</div>
@@ -5655,7 +5661,7 @@ function renderRegEventi() {
  ${ev.luogo ? `<div class="rec-info-row">📍 <span>${formatLuogoConACapo(ev.luogo)}</span></div>` : ""}
  ${prenInfo}
  </div>
- ${sessPills ? `<div class="rec-pills" style="margin-top:10px">${sessPills}</div>` : ""}
+ ${sessPills ? (nSess > 3 ? sessPills : `<div class="rec-pills" style="margin-top:10px">${sessPills}</div>`) : ""}
  </div>
  <div class="rec-footer">
  <button type="button" class="rec-foot-btn" onclick="event.stopPropagation();apriDettaglioEvento(${i})">Dettaglio</button>
@@ -12872,6 +12878,9 @@ function renderMappaIscrizioniSessione(evId, sessId, sessNome, sessMeta) {
  );
  const totPersone = prenSess.reduce((s, p) => s + (parseInt(p.numPersone || 1, 10) || 1), 0);
  const tipoLabel = labelTipoSessione(sessMeta?.tipoSessione || "GDT");
+ // Posti della sessione (maxPosti 0/assente = capienza illimitata)
+ const maxPostiSess = parseInt(sessMeta?.maxPosti || 0, 10) || 0;
+ const sessIllimitata = maxPostiSess < 1;
 
  const personeHtml = prenSess.length
  ? prenSess.map(p => {
@@ -12913,8 +12922,8 @@ function renderMappaIscrizioniSessione(evId, sessId, sessNome, sessMeta) {
  </div>
  </div>
  <div style="text-align:right">
- <div class="mtav-count">${totPersone}</div>
- <div class="mtav-count-sub">persone</div>
+ <div class="mtav-count">${totPersone}${sessIllimitata ? "" : ` / ${maxPostiSess}`}</div>
+ <div class="mtav-count-sub">${sessIllimitata ? "persone" : "posti occupati"}</div>
  </div>
  </div>
  <div class="mtav-body">
@@ -12951,9 +12960,7 @@ function renderMappaIscrizioniSessione(evId, sessId, sessNome, sessMeta) {
  const db = new Date(b.timestamp || 0).getTime();
  return da - db;
  });
- // Posti liberi in sessione (maxPosti 0/assente = capienza illimitata)
- const maxPostiSess = parseInt(sessMeta?.maxPosti || 0, 10) || 0;
- const sessIllimitata = maxPostiSess < 1;
+ // Posti liberi in sessione
  const libSess = sessIllimitata ? Infinity : Math.max(0, maxPostiSess - totPersone);
  if (attesaGrid && attesaEmpty) {
  if (prenAttesa.length) {

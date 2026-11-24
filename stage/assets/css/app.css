@@ -7898,3 +7898,10 @@ body.sede-monitor .sede-write{display:none!important}
 @media (min-width: 900px){
  .reg-ev-grid{ grid-template-columns:repeat(auto-fill,minmax(480px,1fr)); }
 }
+
+/* Evento con molte sessioni: elenco compatto, la card occupa tutta la riga su ogni schermo */
+.rec-sess-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;margin:10px 0 14px}
+.reg-ev-card.many-sess{ grid-column:1/-1; }
+.rec-sess-row{display:flex;flex-direction:column;gap:1px;padding:5px 10px;border:1px solid var(--vellum);border-radius:8px;background:var(--parch2)}
+.rec-sess-when{font-family:var(--font-m);font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ember)}
+.rec-sess-nome{font-size:12px;color:var(--ash)}
