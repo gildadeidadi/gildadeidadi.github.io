@@ -85,7 +85,8 @@
     apiUrl: "",
     // "fetch" (default) | "gas" (pagina servita da Apps Script, google.script.run)
     transport: "",
-    timeoutMs: 30000,
+    // getDatiOrganizzatore("full") con i dati reali supera i 30 s: sotto i 90 la dashboard resterebbe con dati vecchi.
+    timeoutMs: 90000,
     redirecting: redirect
   };
 
