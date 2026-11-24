@@ -7905,3 +7905,9 @@ body.sede-monitor .sede-write{display:none!important}
 .rec-sess-row{display:flex;flex-direction:column;gap:1px;padding:5px 10px;border:1px solid var(--vellum);border-radius:8px;background:var(--parch2)}
 .rec-sess-when{font-family:var(--font-m);font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ember)}
 .rec-sess-nome{font-size:12px;color:var(--ash)}
+
+/* UI ridotta del 10%: quasi tutto è in px (anche inline), quindi zoom sulla radice invece di cambiare la base. */
+html{ zoom:.9; }
+/* Con lo zoom 100dvh vale il 90% dello schermo: si compensa dove serve tutta l'altezza. */
+body{ min-height:calc(100dvh / .9); }
+body.reg-sending #app.wrap{ min-height:calc(100dvh / .9); }

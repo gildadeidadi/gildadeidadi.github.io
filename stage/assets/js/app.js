@@ -4064,7 +4064,8 @@ function pinOrgHeaderFlush() {
  header.style.setProperty("z-index", "400", "important");
  // Prima misura a top:0; se il containing block sandbox lo sposta, compensa.
  header.style.setProperty("top", "0", "important");
- const top = header.getBoundingClientRect().top;
+ // getBoundingClientRect è già ridotto dallo zoom CSS di html: si riporta in px CSS.
+ const top = header.getBoundingClientRect().top / (header.currentCSSZoom || 1);
  if (Math.abs(top) > 0.5) {
  header.style.setProperty("top", (-top) + "px", "important");
  }
@@ -4079,7 +4080,7 @@ function syncOrgHeaderOffset() {
  }
  pinOrgHeaderFlush();
  const rect = header.getBoundingClientRect();
- const h = Math.ceil(Math.max(rect.bottom, 0) || header.offsetHeight || 0);
+ const h = Math.ceil(Math.max(rect.bottom / (header.currentCSSZoom || 1), 0) || header.offsetHeight || 0);
  if (h > 0) document.documentElement.style.setProperty("--org-header-offset", h + "px");
 }
 
