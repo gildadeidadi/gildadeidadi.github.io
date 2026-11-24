@@ -22,7 +22,7 @@ const APP_CONFIG = window.GILDA_CONFIG || {};
  gildaRun()
  .withSuccessHandler(b => {
  if (b === "MANUTENZIONE") bloccaPerRilascio("Sito in manutenzione", "Stiamo aggiornando il sito: le operazioni sono sospese. Riprova tra poco.");
- else if (b && b !== APP_CONFIG.buildId) bloccaPerRilascio("È stata pubblicata una nuova versione", "Ricarica la pagina per continuare. Nel frattempo le operazioni sono sospese.");
+ else if (b && b !== APP_CONFIG.buildId && !/^web-/.test(APP_CONFIG.buildId)) bloccaPerRilascio("È stata pubblicata una nuova versione", "Ricarica la pagina per continuare. Nel frattempo le operazioni sono sospese.");
  })
  .withFailureHandler(() => {})
  .getBuildServer();
