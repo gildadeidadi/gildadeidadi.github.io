@@ -31,8 +31,37 @@
   };
 
   var pagina = get("pagina");
-  var mode = get("mode") || (pagina === "organizzatore" ? "org" : "");
   var baseUrl = window.location.origin + window.location.pathname;
+  var redirect = "";
+
+  // Pagine separate (GitHub Pages): ogni cartella ha <html data-pagina="…">.
+  // I link con ?pagina=… (email, WordPress) vengono portati alla cartella giusta.
+  var paginaFile = document.documentElement.getAttribute("data-pagina") || "";
+  if (paginaFile) {
+    var cartelle = {
+      prenotazione: "", utente: "utente", organizzatore: "organizzatore", master: "master",
+      partner: "partner", sede: "partner", accoglienza: "accoglienza", feedback: "feedback"
+    };
+    var qui = paginaFile === "prenotazione" ? "" : paginaFile;
+    var root = window.location.pathname.replace(/[^/]*$/, "");
+    if (qui) root = root.replace(/[^/]+\/$/, "");
+    baseUrl = window.location.origin + root;
+
+    // Stesse regole di paginaFile() in pack-gas-ui.js; sulle sottopagine conta solo ?pagina=.
+    var richiesta = pagina.toLowerCase();
+    if (!richiesta && !qui) {
+      if (get("mode") === "org") richiesta = "organizzatore";
+      else if (get("masterId") || get("mid") || get("master")) richiesta = "master";
+      else if (get("sedeId") || get("sid") || get("sede")) richiesta = "partner";
+      else if (get("uuid")) richiesta = "utente";
+    }
+    if (Object.prototype.hasOwnProperty.call(cartelle, richiesta) && cartelle[richiesta] !== qui) {
+      var dest = cartelle[richiesta];
+      redirect = window.location.origin + root + (dest ? dest + "/" : "") + window.location.search + window.location.hash;
+    }
+    if (!pagina && qui) pagina = qui;
+  }
+  var mode = get("mode") || (pagina === "organizzatore" ? "org" : "");
 
   var config = {
     uuid: get("uuid"),
@@ -56,8 +85,10 @@
     apiUrl: "",
     // "fetch" (default) | "gas" (pagina servita da Apps Script, google.script.run)
     transport: "",
-    timeoutMs: 30000
+    timeoutMs: 30000,
+    redirecting: redirect
   };
 
   window.GILDA_CONFIG = Object.assign(config, window.GILDA_CONFIG || {});
+  if (redirect) window.location.replace(redirect);
 })();

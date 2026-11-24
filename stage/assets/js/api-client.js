@@ -148,6 +148,8 @@
 
   function call(method, args) {
     if (!method) return Promise.reject(new Error("Metodo backend mancante"));
+    // La pagina sta passando alla cartella giusta: nessuna chiamata (es. un OTP non va consumato due volte).
+    if (cfg.redirecting) return new Promise(function () {});
     if (cfg.transport === "gas") return gasCall(method, args || []);
     return fetchCall(method, args || []);
   }
