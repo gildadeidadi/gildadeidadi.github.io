@@ -7589,6 +7589,13 @@ body{
     border-bottom-left-radius:0;
     border-bottom-right-radius:0;
   }
+  /* Popup brevi (esito, errore, avviso, conferma, caricamento): a metà pagina, non in fondo come i moduli. */
+  #notify-popup.overlay, #action-overlay.overlay, #overlay.overlay, #uscita-portale-overlay.overlay{
+    align-items:center;
+  }
+  #notify-popup .dialog, #action-overlay .dialog, #overlay .dialog, #uscita-portale-overlay .dialog{
+    border-radius:var(--radius-l);
+  }
   .site-footer{
     padding:8px 12px max(8px, env(safe-area-inset-bottom, 0px));
   }
